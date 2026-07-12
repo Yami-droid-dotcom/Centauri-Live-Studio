@@ -27,6 +27,7 @@ function createWindow() {
     backgroundColor: '#090d14',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
+  win.webContents.on('console-message', (_, level, message) => { if (level >= 2) console.error(`[Renderer] ${message}`); });
   win.loadFile(path.join(__dirname, 'renderer/index.html'));
 }
 
@@ -69,10 +70,11 @@ ipcMain.handle('discover', async () => {
 
 ipcMain.handle('probe', async (_, ip) => ({ camera: await testPort(ip, 3031, 1500), control: await testPort(ip, 3030, 1500) }));
 ipcMain.handle('choose-recording-folder', async () => {
-  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], defaultPath: app.getPath('movies'), title: 'Choisir le dossier des enregistrements' });
+  let moviesPath; try { moviesPath = app.getPath('movies'); } catch { moviesPath = path.join(os.homedir(), 'Movies'); }
+  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], defaultPath: moviesPath, title: 'Choisir le dossier des enregistrements' });
   return result.canceled ? null : result.filePaths[0];
 });
-ipcMain.handle('default-recording-folder', () => app.getPath('movies'));
+ipcMain.handle('default-recording-folder', () => { try { return app.getPath('movies'); } catch { return path.join(os.homedir(), 'Movies'); } });
 
 async function findFfmpeg() {
   for (const candidate of ffmpegCandidates()) {
