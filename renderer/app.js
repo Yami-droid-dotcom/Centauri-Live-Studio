@@ -1,0 +1,31 @@
+const $ = s => document.querySelector(s); const $$ = s => [...document.querySelectorAll(s)];
+const state = { connected:false, streaming:false, profile:'balanced', startTime:null, destinations:[
+  {name:'YouTube',icon:'▶',server:'rtmp://a.rtmp.youtube.com/live2/',enabled:false,key:''},
+  {name:'Twitch',icon:'◈',server:'rtmp://live.twitch.tv/app/',enabled:false,key:''},
+  {name:'Facebook',icon:'f',server:'rtmps://live-api-s.facebook.com:443/rtmp/',enabled:false,key:''},
+  {name:'TikTok',icon:'♪',server:'',enabled:false,key:''}
+]};
+let timerInterval;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
+function camera(){return `http://${$('#printerIP').value.trim()}:3031/video`}
+function renderDestinations(){
+  $('#destinationList').innerHTML=state.destinations.map((d,i)=>`<article class="destination"><div class="desthead"><div class="destname"><div class="platformIcon">${d.icon}</div><div>${d.name}<p>${d.enabled?'Activée':'Désactivée'}</p></div></div><button class="switch ${d.enabled?'on':''}" data-toggle="${i}"></button></div><div class="fields">${d.name==='TikTok'?`<input data-server="${i}" placeholder="URL du serveur RTMP TikTok" value="${d.server}">`:`<small>${d.server}</small>`}<input type="password" data-key="${i}" placeholder="Clé de diffusion"></div></article>`).join('');
+  $$('[data-toggle]').forEach(b=>b.onclick=()=>{state.destinations[+b.dataset.toggle].enabled=!state.destinations[+b.dataset.toggle].enabled;renderDestinations();updateReady()});
+  $$('[data-key]').forEach(i=>i.oninput=()=>{state.destinations[+i.dataset.key].key=i.value;updateReady()});
+  $$('[data-server]').forEach(i=>i.oninput=()=>{state.destinations[+i.dataset.server].server=i.value;updateReady()});
+  updateReady();
+}
+function updateReady(){const active=state.destinations.filter(d=>d.enabled&&d.key&&d.server).length;$('#statDest').textContent=`${active} active${active>1?'s':''}`;const ready=state.connected&&active>0;$('#streamBtn').disabled=!ready&&!state.streaming;$('#readyDot').className='dot '+(ready?'ok':'');$('#readyText').textContent=ready?'Prêt à diffuser':'Configuration requise';$('#readyDetail').textContent=!state.connected?'Connectez une caméra':active===0?'Configurez au moins une destination':'Tous les contrôles sont validés'}
+async function connect(){const ip=$('#printerIP').value.trim();$('#cameraLabel').textContent='Test de la connexion…';const result=await window.centauri.probe(ip);state.connected=result.camera;if(result.camera){$('#preview').src=camera()+`?t=${Date.now()}`;$('#preview').classList.add('connected');$('#emptyPreview').style.display='none';$('#cameraLabel').textContent=`Centauri Carbon · ${ip}:3031`;toast('Caméra connectée')}else{$('#preview').classList.remove('connected');$('#emptyPreview').style.display='grid';$('#cameraLabel').textContent='Caméra inaccessible';toast('Connexion impossible')}updateReady();return result}
+$('#connectBtn').onclick=connect;$('#refreshPreview').onclick=()=>{if(state.connected)$('#preview').src=camera()+`?t=${Date.now()}`};
+$('#discoverBtn').onclick=async()=>{const b=$('#discoverBtn');b.textContent='Détection en cours…';b.disabled=true;const found=await window.centauri.discover();$('#devices').innerHTML=found.length?found.map(d=>`<div class="device" data-ip="${d.ip}">Centauri Carbon — ${d.ip}</div>`).join(''):'<div class="device">Aucune imprimante trouvée</div>';$$('[data-ip]').forEach(x=>x.onclick=()=>{$('#printerIP').value=x.dataset.ip;connect()});b.textContent='⌕ Détecter automatiquement';b.disabled=false;toast(`${found.length} imprimante(s) détectée(s)`) };
+$$('.profiles button').forEach(b=>b.onclick=()=>{$$('.profiles button').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');state.profile=b.dataset.profile;$('#statProfile').textContent=b.querySelector('span').textContent});
+$$('nav button').forEach(b=>b.onclick=()=>{$$('nav button,.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('#'+b.dataset.page).classList.add('active')});
+$('#streamBtn').onclick=async()=>{if(state.streaming){await window.centauri.stop();return}const result=await window.centauri.start({camera:camera(),profile:state.profile,destinations:state.destinations});if(!result.ok)return toast(result.error);setStreaming(true)};
+function setStreaming(on){state.streaming=on;$('#streamBtn').textContent=on?'Arrêter le live':'Démarrer le live';$('#streamBtn').classList.toggle('stop',on);$('#liveBadge').innerHTML=on?'<span class="dot live"></span>EN DIRECT':'<span class="dot"></span>HORS LIGNE';$('#statState').textContent=on?'En direct':'En attente';if(on){state.startTime=Date.now();timerInterval=setInterval(()=>{const s=Math.floor((Date.now()-state.startTime)/1000);$('#timer').textContent=new Date(s*1000).toISOString().slice(11,19)},1000)}else{clearInterval(timerInterval);$('#timer').textContent='00:00:00'}updateReady()}
+window.centauri.onEnded(code=>{setStreaming(false);toast(code===0?'Diffusion arrêtée':`Diffusion interrompue (code ${code})`)});
+let logs='';window.centauri.onLog(text=>{logs=(logs+text).slice(-20000);$('#diagLog').textContent=logs;$('#diagLog').scrollTop=$('#diagLog').scrollHeight});
+$('#runDiag').onclick=async()=>{const ip=$('#printerIP').value.trim(),p=await window.centauri.probe(ip),f=await window.centauri.ffmpegStatus();$('#diagLog').textContent=`Diagnostic Centauri Live\n\nImprimante : ${ip}\nCaméra (3031) : ${p.camera?'OK':'INACCESSIBLE'}\nContrôle (3030) : ${p.control?'OK':'INACCESSIBLE'}\nFFmpeg : ${f.installed?'INSTALLÉ':'ABSENT'}\nSystème : ${f.platform}\nFlux : http://${ip}:3031/video`};
+$('#installFfmpeg').onclick=()=>window.centauri.installFfmpeg();
+window.centauri.ffmpegStatus().then(f=>{$('#ffmpegDot').classList.toggle('ok',f.installed);$('#ffmpegText').textContent=f.installed?'Installé et prêt':'Installation requise'});
+renderDestinations();connect();

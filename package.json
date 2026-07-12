@@ -1,0 +1,25 @@
+{
+  "name": "centauri-live-studio",
+  "version": "1.4.0",
+  "description": "Studio de diffusion pour Elegoo Centauri Carbon",
+  "main": "main.js",
+  "author": "ApeXploit",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac zip --arm64",
+    "dist:win": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "studio.centauri.live",
+    "productName": "Centauri Live Studio",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "renderer/**/*", "package.json"],
+    "mac": { "category": "public.app-category.video", "target": "zip", "icon": "build/icon.png" },
+    "win": { "target": "portable", "icon": "build/icon.png", "artifactName": "Centauri-Live-Studio-Windows-${version}.${ext}" }
+  }
+}

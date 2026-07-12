@@ -1,0 +1,28 @@
+<!doctype html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><title>Centauri Live Studio</title><link rel="stylesheet" href="style.css"></head>
+<link rel="stylesheet" href="slicer-theme.css"><body>
+  <aside>
+    <div class="brand"><img class="logo" src="assets/apexploit-logo.png" alt="ApeXploit"><div><strong>Centauri Live</strong><span>BY APEXPLOIT</span></div></div>
+    <nav><button class="active" data-page="studio">◉ <span>Studio</span></button><button data-page="destinations">⌁ <span>Destinations</span></button><button data-page="diagnostics">◇ <span>Diagnostic</span></button></nav>
+    <div class="system"><span id="ffmpegDot" class="dot"></span><div><b>Moteur vidéo</b><small id="ffmpegText">Vérification…</small></div></div>
+  </aside>
+  <main>
+    <header><div><h1>Studio de diffusion</h1><p>Elegoo Centauri Carbon · diffusion locale sécurisée</p></div><div id="liveBadge" class="badge"><span class="dot"></span>HORS LIGNE</div></header>
+
+    <section id="studio" class="page active">
+      <div class="grid">
+        <article class="preview card"><div class="cardhead"><div><h2>Aperçu caméra</h2><p id="cameraLabel">Aucune imprimante connectée</p></div><button id="refreshPreview" class="icon">↻</button></div><div class="video"><img id="preview" alt="Flux de la caméra"><div id="emptyPreview"><b>Caméra non connectée</b><span>Sélectionnez ou détectez une imprimante</span></div><div class="videoTag">● LIVE PREVIEW</div></div></article>
+        <div class="rightcol">
+          <article class="card connect"><div class="cardhead"><div><h2>Imprimante</h2><p>Connexion au réseau local</p></div></div><label>Adresse IP</label><div class="inputrow"><input id="printerIP" value="192.168.1.203" placeholder="192.168.1.203"><button id="connectBtn">Connecter</button></div><button id="discoverBtn" class="secondary full">⌕ Détecter automatiquement</button><div id="devices" class="devices"></div></article>
+          <article class="card"><div class="cardhead"><div><h2>Qualité de diffusion</h2><p>Optimisation temps réel</p></div></div><div class="profiles"><button data-profile="economy"><b>Éco</b><span>480p · 1,8 Mb/s</span></button><button data-profile="balanced" class="selected"><b>Équilibré</b><span>720p · 3,5 Mb/s</span></button><button data-profile="studio"><b>Studio</b><span>720p · 5 Mb/s</span></button></div></article>
+        </div>
+      </div>
+      <article class="card control"><div><span id="readyDot" class="dot"></span><b id="readyText">Configuration requise</b><small id="readyDetail">Connectez une caméra et configurez une destination</small></div><button id="streamBtn" class="go" disabled>Démarrer le live</button></article>
+      <div class="stats"><div><span>ÉTAT</span><b id="statState">En attente</b></div><div><span>PROFIL</span><b id="statProfile">720p Équilibré</b></div><div><span>DESTINATIONS</span><b id="statDest">0 active</b></div><div><span>DURÉE</span><b id="timer">00:00:00</b></div></div>
+    </section>
+
+    <section id="destinations" class="page"><div class="sectiontitle"><h2>Destinations de diffusion</h2><p>Les clés restent en mémoire et disparaissent à la fermeture.</p></div><div id="destinationList" class="destinationList"></div></section>
+    <section id="diagnostics" class="page"><div class="sectiontitle"><h2>Diagnostic</h2><p>État de la caméra, du contrôle réseau et de FFmpeg.</p></div><article class="card diag"><button id="runDiag">Lancer le diagnostic</button><button id="installFfmpeg" class="secondary">Installer FFmpeg</button><pre id="diagLog">Aucun diagnostic lancé.</pre></article></section>
+    <footer><img src="assets/apexploit-logo.png" alt=""><span>Créé par <b>ApeXploit</b><br>Application indépendante pour Elegoo Centauri Carbon — non affiliée, approuvée ou éditée par Elegoo.</span></footer>
+  </main>
+  <div id="toast"></div><script src="app.js"></script>
+</body></html>

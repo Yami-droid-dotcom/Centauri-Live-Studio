@@ -1,0 +1,15 @@
+:root{--bg:#242629;--panel:#323438;--panel2:#3b3e42;--line:#505359;--text:#f1f2f3;--muted:#a8adb3;--cyan:#179fd3;--blue:#087fb9;--green:#39ef18;--red:#e85b5b;--accent:#39ef18}
+body{background:#242629;color:var(--text)}
+aside{background:#2c2e31;border-color:#171819;box-shadow:3px 0 12px #0004}
+.logo{width:42px;height:42px;object-fit:cover;background:#050705;border:1px solid #35f20d;border-radius:6px;box-shadow:0 0 10px #35f20d45}.brand span{color:#63ef43}
+nav button.active{background:#344331;color:#fff;border-left-color:var(--accent)}
+.card,.destination{background:#323438;border-color:#4a4d52;box-shadow:0 5px 18px #0003}
+.badge,.stats{background:#2f3134;border-color:#4a4d52}
+.icon,.secondary{background:#3b3e42!important;border-color:#55585d!important;color:#d4d6d8!important}
+input{background:#292b2e;color:#fff;border-color:#56595e}input:focus{border-color:var(--accent);box-shadow:0 0 0 2px #39ef1830}
+.inputrow button,.diag button,.go{background:linear-gradient(180deg,#42f51f,#24b90b);border:1px solid #66ff49;color:#071006}.go{box-shadow:0 5px 15px #39ef1835}
+.profiles button{background:#292b2e;border-color:#505359;color:#aeb3b8}.profiles button b{color:#eceeef}.profiles button.selected{border-color:var(--accent);background:#31432e;box-shadow:inset 0 0 0 1px #39ef1840}
+.device{color:#55bde3;border-color:#484b50}.platformIcon{background:#284657;color:#57bfe6}
+.switch{background:#505359}.switch.on{background:var(--accent)}
+.diag pre{background:#1d1f21;border-color:#46494d;color:#c5d5dc}.video{background:#181a1c;border:1px solid #4d5054}.videoTag{background:#292b2ee6;border-color:#55585d;color:#d0d3d6}
+#toast{background:#3b3e42;color:#fff;border-color:#5b5e63}footer{color:#8f9499;border-color:#45484c;display:flex;align-items:center;justify-content:center;gap:9px}footer img{width:28px;height:28px;border-radius:4px}footer b{color:#65e84b}
