@@ -75,6 +75,17 @@ ipcMain.handle('choose-recording-folder', async () => {
   return result.canceled ? null : result.filePaths[0];
 });
 ipcMain.handle('default-recording-folder', () => { try { return app.getPath('movies'); } catch { return path.join(os.homedir(), 'Movies'); } });
+ipcMain.handle('open-help-link', (_, key) => {
+  const links = {
+    official: 'https://ffmpeg.org/download.html',
+    windows: 'https://www.gyan.dev/ffmpeg/builds/',
+    macos: 'https://evermeet.cx/ffmpeg/',
+    homebrew: 'https://brew.sh/'
+  };
+  if (!links[key]) return { ok: false };
+  shell.openExternal(links[key]);
+  return { ok: true };
+});
 
 async function findFfmpeg() {
   for (const candidate of ffmpegCandidates()) {

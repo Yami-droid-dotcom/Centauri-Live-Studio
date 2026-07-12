@@ -27,6 +27,8 @@ npm run dist:win
 
 FFmpeg peut être installé directement depuis l'écran **Diagnostic**. Sur macOS, l'application pilote Homebrew ; sur Windows, elle utilise `winget` et le paquet `Gyan.FFmpeg.Essentials`. La progression et les éventuelles erreurs sont affichées dans le journal intégré.
 
+En cas d'échec, consultez d'abord la [page officielle de téléchargement FFmpeg](https://ffmpeg.org/download.html). Elle référence notamment [gyan.dev pour Windows](https://www.gyan.dev/ffmpeg/builds/) et [evermeet.cx pour macOS](https://evermeet.cx/ffmpeg/). Sur un Mac Apple Silicon, l'installation avec [Homebrew](https://brew.sh/) reste préférable.
+
 ## Indépendance
 
 Ce projet est indépendant et n'est ni affilié, ni approuvé, ni édité par Elegoo. Elegoo et Centauri Carbon sont des marques de leurs propriétaires respectifs.

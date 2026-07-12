@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('centauri', {
   probe: ip => ipcRenderer.invoke('probe', ip),
   chooseRecordingFolder: () => ipcRenderer.invoke('choose-recording-folder'),
   defaultRecordingFolder: () => ipcRenderer.invoke('default-recording-folder'),
+  openHelpLink: key => ipcRenderer.invoke('open-help-link', key),
   ffmpegStatus: () => ipcRenderer.invoke('ffmpeg-status'),
   secureStorageStatus: () => ipcRenderer.invoke('secure-storage-status'),
   saveSecrets: destinations => ipcRenderer.invoke('save-secrets', destinations),
