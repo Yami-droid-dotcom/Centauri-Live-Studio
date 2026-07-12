@@ -22,7 +22,7 @@ npm run dist:mac
 npm run dist:win
 ```
 
-FFmpeg doit être installé sur la machine cible. Sur macOS, le bouton d'installation utilise Homebrew. Sur Windows, l'application ouvre la page des builds FFmpeg ; `ffmpeg.exe` doit ensuite être placé dans le PATH ou à côté des ressources de l'application.
+FFmpeg peut être installé directement depuis l'écran **Diagnostic**. Sur macOS, l'application pilote Homebrew ; sur Windows, elle utilise `winget` et le paquet `Gyan.FFmpeg.Essentials`. La progression et les éventuelles erreurs sont affichées dans le journal intégré.
 
 ## Indépendance
 

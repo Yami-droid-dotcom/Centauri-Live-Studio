@@ -1,12 +1,23 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const { spawn, execFile } = require('child_process');
+const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
 
-let win, streamProcess;
+let win, streamProcess, installProcess;
+function wingetFFmpegCandidates() {
+  if (process.platform !== 'win32') return [];
+  const root = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages');
+  if (!fs.existsSync(root)) return [];
+  try {
+    return fs.readdirSync(root, { recursive: true, withFileTypes: true })
+      .filter(e => e.isFile() && e.name.toLowerCase() === 'ffmpeg.exe')
+      .map(e => path.join(e.parentPath || e.path, e.name));
+  } catch { return []; }
+}
 const ffmpegCandidates = () => process.platform === 'win32'
-  ? [path.join(process.resourcesPath, 'ffmpeg.exe'), 'ffmpeg.exe', 'ffmpeg']
+  ? [path.join(process.resourcesPath, 'ffmpeg.exe'), ...wingetFFmpegCandidates(), 'ffmpeg.exe', 'ffmpeg']
   : [path.join(process.resourcesPath, 'ffmpeg'), '/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', 'ffmpeg'];
 
 function createWindow() {
@@ -68,12 +79,28 @@ async function findFfmpeg() {
 
 ipcMain.handle('ffmpeg-status', async () => ({ installed: !!(await findFfmpeg()), platform: process.platform }));
 ipcMain.handle('install-ffmpeg', async () => {
-  if (process.platform === 'darwin') {
-    spawn('open', ['-a', 'Terminal', path.join(__dirname, 'renderer/install-ffmpeg-mac.command')], { detached: true });
+  if (installProcess) return { ok: false, error: 'Une installation est déjà en cours.' };
+  const command = process.platform === 'darwin' ? '/opt/homebrew/bin/brew' : 'winget';
+  const args = process.platform === 'darwin'
+    ? ['install', 'ffmpeg']
+    : ['install', '--exact', '--id', 'Gyan.FFmpeg.Essentials', '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity'];
+  if (process.platform === 'darwin' && !fs.existsSync(command))
+    return { ok: false, error: 'Homebrew est requis. Installez-le depuis brew.sh puis réessayez.' };
+  try {
+    installProcess = spawn(command, args, { windowsHide: true });
+    const relay = data => win?.webContents.send('ffmpeg-install-log', data.toString());
+    installProcess.stdout.on('data', relay); installProcess.stderr.on('data', relay);
+    installProcess.on('error', error => {
+      installProcess = null;
+      win?.webContents.send('ffmpeg-install-ended', { ok: false, error: error.message });
+    });
+    installProcess.on('exit', async code => {
+      installProcess = null;
+      const installed = !!(await findFfmpeg());
+      win?.webContents.send('ffmpeg-install-ended', { ok: code === 0 && installed, code, installed });
+    });
     return { ok: true };
-  }
-  shell.openExternal('https://www.gyan.dev/ffmpeg/builds/');
-  return { ok: true, manual: true };
+  } catch (error) { installProcess = null; return { ok: false, error: error.message }; }
 });
 
 function safeTarget(server, key) {
