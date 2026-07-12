@@ -14,6 +14,7 @@
         <div class="rightcol">
           <article class="card connect"><div class="cardhead"><div><h2>Imprimante</h2><p>Connexion au réseau local</p></div></div><label>Adresse IP</label><div class="inputrow"><input id="printerIP" value="192.168.1.203" placeholder="192.168.1.203"><button id="connectBtn">Connecter</button></div><button id="discoverBtn" class="secondary full">⌕ Détecter automatiquement</button><div id="devices" class="devices"></div></article>
           <article class="card"><div class="cardhead"><div><h2>Qualité de diffusion</h2><p>Optimisation temps réel</p></div></div><div class="profiles"><button data-profile="economy"><b>Éco</b><span>480p · 1,8 Mb/s</span></button><button data-profile="balanced" class="selected"><b>Équilibré</b><span>720p · 3,5 Mb/s</span></button><button data-profile="studio"><b>Studio</b><span>720p · 5 Mb/s</span></button></div></article>
+          <article class="card recording"><div class="cardhead"><div><h2>Enregistrement local</h2><p>Copie MKV résistante aux interruptions</p></div><button id="recordToggle" class="switch"></button></div><div class="recordPath"><span id="recordingPath">Dossier non sélectionné</span><button id="chooseRecording" class="secondary">Choisir</button></div></article>
         </div>
       </div>
       <article class="card control"><div><span id="readyDot" class="dot"></span><b id="readyText">Configuration requise</b><small id="readyDetail">Connectez une caméra et configurez une destination</small></div><button id="streamBtn" class="go" disabled>Démarrer le live</button></article>
@@ -24,5 +25,6 @@
     <section id="diagnostics" class="page"><div class="sectiontitle"><h2>Diagnostic</h2><p>État de la caméra, du contrôle réseau et de FFmpeg.</p></div><article class="card diag"><button id="runDiag">Lancer le diagnostic</button><button id="installFfmpeg" class="secondary">Installer FFmpeg automatiquement</button><div id="installProgress" class="installProgress"><span></span></div><pre id="diagLog">Aucun diagnostic lancé.</pre></article></section>
     <footer><img src="assets/apexploit-logo.png" alt=""><span>Créé par <b>ApeXploit</b><br>Application indépendante pour Elegoo Centauri Carbon — non affiliée, approuvée ou éditée par Elegoo.</span></footer>
   </main>
+  <div id="onboarding" class="onboarding"><div class="wizard"><img src="assets/apexploit-logo.png" alt="ApeXploit"><span id="wizardStep">ÉTAPE 1 SUR 3</span><h2 id="wizardTitle">Bienvenue dans Centauri Live</h2><p id="wizardText">Configurons votre Centauri Carbon et le moteur vidéo en quelques instants.</p><div class="wizardActions"><button id="wizardSkip" class="secondary">Ignorer</button><button id="wizardNext">Commencer</button></div></div></div>
   <div id="toast"></div><script src="app.js"></script>
 </body></html>

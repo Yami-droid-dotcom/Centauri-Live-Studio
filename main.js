@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, safeStorage, dialog } = require('electron');
 const { spawn, execFile } = require('child_process');
 const fs = require('fs');
 const net = require('net');
@@ -68,6 +68,11 @@ ipcMain.handle('discover', async () => {
 });
 
 ipcMain.handle('probe', async (_, ip) => ({ camera: await testPort(ip, 3031, 1500), control: await testPort(ip, 3030, 1500) }));
+ipcMain.handle('choose-recording-folder', async () => {
+  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], defaultPath: app.getPath('movies'), title: 'Choisir le dossier des enregistrements' });
+  return result.canceled ? null : result.filePaths[0];
+});
+ipcMain.handle('default-recording-folder', () => app.getPath('movies'));
 
 async function findFfmpeg() {
   for (const candidate of ffmpegCandidates()) {
@@ -137,8 +142,16 @@ async function launchStream(config) {
   const ffmpeg = await findFfmpeg();
   if (!ffmpeg) return { ok: false, error: 'FFmpeg est introuvable.' };
   const active = config.destinations.filter(d => d.enabled && d.server && d.key);
-  if (!active.length) return { ok: false, error: 'Aucune destination complète.' };
-  const tee = active.map(d => `[f=flv:onfail=ignore]${safeTarget(d.server, d.key)}`).join('|');
+  if (!active.length && !config.recording?.enabled) return { ok: false, error: 'Aucune destination ou sortie locale active.' };
+  const outputs = active.map(d => `[f=flv:onfail=ignore]${safeTarget(d.server, d.key)}`);
+  if (config.recording?.enabled && config.recording.path) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const outputPath = path.join(config.recording.path, `Centauri-${stamp}.mkv`);
+    const escapedPath = outputPath.replaceAll('\\', '\\\\').replaceAll(':', '\\:').replaceAll('|', '\\|').replaceAll("'", "\\'");
+    outputs.push(`[f=matroska:onfail=ignore]${escapedPath}`);
+    win?.webContents.send('recording-started', outputPath);
+  }
+  const tee = outputs.join('|');
   const profiles = {
     economy: { filter: 'scale=854:480:flags=lanczos', bitrate: '1800k', buffer: '3600k' },
     balanced: { filter: 'scale=1280:720:flags=lanczos,eq=contrast=1.04:saturation=1.04,unsharp=5:5:0.35', bitrate: '3500k', buffer: '7000k' },
