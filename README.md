@@ -1,6 +1,15 @@
 # Centauri Live Studio
 
-<p align="center"><img src="renderer/assets/apexploit-logo.png" width="180" alt="Logo ApeXploit"></p>
+<table align="center">
+  <tr>
+    <th>Logo de l'application</th>
+    <th>Logo de l'auteur</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="renderer/assets/centauri-live-studio-logo.png" width="180" alt="Logo Centauri Live Studio"></td>
+    <td align="center"><img src="renderer/assets/apexploit-logo.png" width="180" alt="Logo ApeXploit"></td>
+  </tr>
+</table>
 
 Application créée par **ApeXploit**.
 
