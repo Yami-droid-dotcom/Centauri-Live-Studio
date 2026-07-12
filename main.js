@@ -155,8 +155,9 @@ async function launchStream(config) {
   const ffmpeg = await findFfmpeg();
   if (!ffmpeg) return { ok: false, error: 'FFmpeg est introuvable.' };
   const active = config.destinations.filter(d => d.enabled && d.server && d.key);
-  if (!active.length && !config.recording?.enabled) return { ok: false, error: 'Aucune destination ou sortie locale active.' };
+  if (!active.length && !config.recording?.enabled && !config.testMode) return { ok: false, error: 'Aucune destination ou sortie locale active.' };
   const outputs = active.map(d => `[f=flv:onfail=ignore]${safeTarget(d.server, d.key)}`);
+  if (config.testMode) outputs.push(`[f=null:onfail=ignore]${process.platform === 'win32' ? 'NUL' : '/dev/null'}`);
   if (config.recording?.enabled && config.recording.path) {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const outputPath = path.join(config.recording.path, `Centauri-${stamp}.mkv`);
@@ -177,14 +178,22 @@ async function launchStream(config) {
   const brightness = clamp(video.brightness, -0.3, 0.3, 0);
   const saturation = clamp(video.saturation, 0, 2, 1);
   const sharpness = clamp(video.sharpness, 0, 1.5, 0.35);
+  const zoom = clamp(video.zoom, 1, 2, 1);
+  const overlaySize = clamp(video.overlaySize, 48, 180, 88);
+  const overlayOpacity = clamp(video.overlayOpacity, 0.15, 1, 1);
+  const positions = { 'bottom-right': 'W-w-18:H-h-18', 'bottom-left': '18:H-h-18', 'top-right': 'W-w-18:18', 'top-left': '18:18' };
+  const overlayPosition = positions[video.overlayPosition] || positions['bottom-right'];
   const scale = p.filter.split(',eq=')[0];
-  const filter = `${scale},eq=contrast=${contrast}:brightness=${brightness}:saturation=${saturation},unsharp=5:5:${sharpness}`;
+  const dimensions = config.profile === 'economy' ? '854:480' : '1280:720';
+  const mirror = video.mirror ? ',hflip' : '';
+  const crop = zoom > 1 ? `,crop=iw/${zoom}:ih/${zoom},scale=${dimensions}:flags=lanczos` : '';
+  const filter = `${scale}${crop}${mirror},eq=contrast=${contrast}:brightness=${brightness}:saturation=${saturation},unsharp=5:5:${sharpness}`;
   const args = ['-hide_banner', '-loglevel', 'info', '-thread_queue_size', '512', '-use_wallclock_as_timestamps', '1', '-i', config.camera,
     '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'];
   if (video.overlay) {
     const logoPath = path.join(app.getPath('temp'), 'centauri-apexploit-overlay.png');
     fs.copyFileSync(path.join(__dirname, 'renderer', 'assets', 'apexploit-logo.png'), logoPath);
-    args.push('-loop', '1', '-i', logoPath, '-filter_complex', `[0:v]${filter}[base];[2:v]scale=88:88[logo];[base][logo]overlay=W-w-18:H-h-18:format=auto[v]`, '-map', '[v]', '-map', '1:a:0');
+    args.push('-loop', '1', '-i', logoPath, '-filter_complex', `[0:v]${filter}[base];[2:v]scale=${overlaySize}:${overlaySize},format=rgba,colorchannelmixer=aa=${overlayOpacity}[logo];[base][logo]overlay=${overlayPosition}:format=auto[v]`, '-map', '[v]', '-map', '1:a:0');
   } else args.push('-map', '0:v:0', '-map', '1:a:0', '-vf', filter);
   args.push('-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-pix_fmt', 'yuv420p',
     '-r', '15', '-g', '30', '-b:v', p.bitrate, '-maxrate', p.bitrate, '-bufsize', p.buffer,
