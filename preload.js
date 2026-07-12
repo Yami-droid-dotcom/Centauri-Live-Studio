@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('centauri', {
   ,onReconnecting: cb => ipcRenderer.on('stream-reconnecting', (_, value) => cb(value))
   ,onReconnected: cb => ipcRenderer.on('stream-reconnected', (_, value) => cb(value))
   ,onRecordingStarted: cb => ipcRenderer.on('recording-started', (_, value) => cb(value))
+  ,onStats: cb => ipcRenderer.on('stream-stats', (_, value) => cb(value))
   ,onInstallLog: cb => ipcRenderer.on('ffmpeg-install-log', (_, value) => cb(value))
   ,onInstallEnded: cb => ipcRenderer.on('ffmpeg-install-ended', (_, value) => cb(value))
 });

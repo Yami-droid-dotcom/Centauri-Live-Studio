@@ -160,15 +160,32 @@ async function launchStream(config) {
     studio: { filter: 'scale=1280:720:flags=lanczos,eq=contrast=1.07:brightness=0.012:saturation=1.06,unsharp=5:5:0.5', bitrate: '5000k', buffer: '10000k' }
   };
   const p = profiles[config.profile] || profiles.balanced;
-  const args = ['-hide_banner', '-loglevel', 'info', '-thread_queue_size', '512', '-i', config.camera,
-    '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100', '-map', '0:v:0', '-map', '1:a:0',
-    '-vf', p.filter, '-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-pix_fmt', 'yuv420p',
-    '-r', '30', '-g', '60', '-b:v', p.bitrate, '-maxrate', p.bitrate, '-bufsize', p.buffer,
-    '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-f', 'tee', tee];
+  const clamp = (value, min, max, fallback) => Math.min(max, Math.max(min, Number.isFinite(Number(value)) ? Number(value) : fallback));
+  const video = config.video || {};
+  const contrast = clamp(video.contrast, 0.7, 1.5, 1);
+  const brightness = clamp(video.brightness, -0.3, 0.3, 0);
+  const saturation = clamp(video.saturation, 0, 2, 1);
+  const sharpness = clamp(video.sharpness, 0, 1.5, 0.35);
+  const scale = p.filter.split(',eq=')[0];
+  const filter = `${scale},eq=contrast=${contrast}:brightness=${brightness}:saturation=${saturation},unsharp=5:5:${sharpness}`;
+  const args = ['-hide_banner', '-loglevel', 'info', '-thread_queue_size', '512', '-use_wallclock_as_timestamps', '1', '-i', config.camera,
+    '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'];
+  if (video.overlay) {
+    const logoPath = path.join(app.getPath('temp'), 'centauri-apexploit-overlay.png');
+    fs.copyFileSync(path.join(__dirname, 'renderer', 'assets', 'apexploit-logo.png'), logoPath);
+    args.push('-loop', '1', '-i', logoPath, '-filter_complex', `[0:v]${filter}[base];[2:v]scale=88:88[logo];[base][logo]overlay=W-w-18:H-h-18:format=auto[v]`, '-map', '[v]', '-map', '1:a:0');
+  } else args.push('-map', '0:v:0', '-map', '1:a:0', '-vf', filter);
+  args.push('-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-pix_fmt', 'yuv420p',
+    '-r', '15', '-g', '30', '-b:v', p.bitrate, '-maxrate', p.bitrate, '-bufsize', p.buffer,
+    '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-flags', '+global_header', '-f', 'tee', tee);
   destinationStates(config, reconnectAttempt ? 'reconnecting' : 'connecting');
   streamProcess = spawn(ffmpeg, args, { windowsHide: true });
   const launchedProcess = streamProcess;
-  streamProcess.stderr.on('data', data => win?.webContents.send('stream-log', data.toString()));
+  streamProcess.stderr.on('data', data => {
+    const text = data.toString(); win?.webContents.send('stream-log', text);
+    const match = text.match(/fps=\s*([\d.]+).*?bitrate=\s*([\d.]+kbits\/s|N\/A).*?speed=\s*([\d.]+x)/);
+    if (match) win?.webContents.send('stream-stats', { fps: match[1], bitrate: match[2], speed: match[3] });
+  });
   streamProcess.once('spawn', () => {
     destinationStates(config, 'live');
     win?.webContents.send('stream-reconnected', { attempt: reconnectAttempt });
