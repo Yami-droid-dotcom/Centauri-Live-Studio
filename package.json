@@ -1,6 +1,6 @@
 {
   "name": "centauri-live-studio",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Studio de diffusion pour Elegoo Centauri Carbon",
   "main": "main.js",
   "author": "ApeXploit",

@@ -1,18 +1,21 @@
 const $ = s => document.querySelector(s); const $$ = s => [...document.querySelectorAll(s)];
+const esc = value => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const state = { connected:false, streaming:false, profile:'balanced', startTime:null, destinations:[
-  {name:'YouTube',icon:'▶',server:'rtmp://a.rtmp.youtube.com/live2/',enabled:false,key:''},
-  {name:'Twitch',icon:'◈',server:'rtmp://live.twitch.tv/app/',enabled:false,key:''},
-  {name:'Facebook',icon:'f',server:'rtmps://live-api-s.facebook.com:443/rtmp/',enabled:false,key:''},
-  {name:'TikTok',icon:'♪',server:'',enabled:false,key:''}
+  {name:'YouTube',icon:'▶',server:'rtmp://a.rtmp.youtube.com/live2/',enabled:false,key:'',status:'idle'},
+  {name:'Twitch',icon:'◈',server:'rtmp://live.twitch.tv/app/',enabled:false,key:'',status:'idle'},
+  {name:'Facebook',icon:'f',server:'rtmps://live-api-s.facebook.com:443/rtmp/',enabled:false,key:'',status:'idle'},
+  {name:'TikTok',icon:'♪',server:'',enabled:false,key:'',status:'idle'}
 ]};
 let timerInterval;
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
 function camera(){return `http://${$('#printerIP').value.trim()}:3031/video`}
+const statusLabel={idle:'En attente',connecting:'Connexion',live:'En direct',reconnecting:'Reconnexion',error:'Erreur'};
+async function persistSecrets(){if($('#rememberKeys')?.checked)await window.centauri.saveSecrets(state.destinations)}
 function renderDestinations(){
-  $('#destinationList').innerHTML=state.destinations.map((d,i)=>`<article class="destination"><div class="desthead"><div class="destname"><div class="platformIcon">${d.icon}</div><div>${d.name}<p>${d.enabled?'Activée':'Désactivée'}</p></div></div><button class="switch ${d.enabled?'on':''}" data-toggle="${i}"></button></div><div class="fields">${d.name==='TikTok'?`<input data-server="${i}" placeholder="URL du serveur RTMP TikTok" value="${d.server}">`:`<small>${d.server}</small>`}<input type="password" data-key="${i}" placeholder="Clé de diffusion"></div></article>`).join('');
-  $$('[data-toggle]').forEach(b=>b.onclick=()=>{state.destinations[+b.dataset.toggle].enabled=!state.destinations[+b.dataset.toggle].enabled;renderDestinations();updateReady()});
-  $$('[data-key]').forEach(i=>i.oninput=()=>{state.destinations[+i.dataset.key].key=i.value;updateReady()});
-  $$('[data-server]').forEach(i=>i.oninput=()=>{state.destinations[+i.dataset.server].server=i.value;updateReady()});
+  $('#destinationList').innerHTML=state.destinations.map((d,i)=>`<article class="destination"><div class="desthead"><div class="destname"><div class="platformIcon">${d.icon}</div><div>${d.name}<p>${d.enabled?'Activée':'Désactivée'}</p></div></div><span class="destStatus ${d.status}">${statusLabel[d.status]||d.status}</span><button class="switch ${d.enabled?'on':''}" data-toggle="${i}"></button></div><div class="fields">${d.name==='TikTok'?`<input data-server="${i}" placeholder="URL du serveur RTMP TikTok" value="${esc(d.server)}">`:`<small>${d.server}</small>`}<input type="password" data-key="${i}" placeholder="Clé de diffusion" value="${esc(d.key)}"></div></article>`).join('');
+  $$('[data-toggle]').forEach(b=>b.onclick=async()=>{state.destinations[+b.dataset.toggle].enabled=!state.destinations[+b.dataset.toggle].enabled;await persistSecrets();renderDestinations();updateReady()});
+  $$('[data-key]').forEach(i=>i.onchange=async()=>{state.destinations[+i.dataset.key].key=i.value;await persistSecrets();updateReady()});
+  $$('[data-server]').forEach(i=>i.onchange=async()=>{state.destinations[+i.dataset.server].server=i.value;await persistSecrets();updateReady()});
   updateReady();
 }
 function updateReady(){const active=state.destinations.filter(d=>d.enabled&&d.key&&d.server).length;$('#statDest').textContent=`${active} active${active>1?'s':''}`;const ready=state.connected&&active>0;$('#streamBtn').disabled=!ready&&!state.streaming;$('#readyDot').className='dot '+(ready?'ok':'');$('#readyText').textContent=ready?'Prêt à diffuser':'Configuration requise';$('#readyDetail').textContent=!state.connected?'Connectez une caméra':active===0?'Configurez au moins une destination':'Tous les contrôles sont validés'}
@@ -24,10 +27,14 @@ $$('nav button').forEach(b=>b.onclick=()=>{$$('nav button,.page').forEach(x=>x.c
 $('#streamBtn').onclick=async()=>{if(state.streaming){await window.centauri.stop();return}const result=await window.centauri.start({camera:camera(),profile:state.profile,destinations:state.destinations});if(!result.ok)return toast(result.error);setStreaming(true)};
 function setStreaming(on){state.streaming=on;$('#streamBtn').textContent=on?'Arrêter le live':'Démarrer le live';$('#streamBtn').classList.toggle('stop',on);$('#liveBadge').innerHTML=on?'<span class="dot live"></span>EN DIRECT':'<span class="dot"></span>HORS LIGNE';$('#statState').textContent=on?'En direct':'En attente';if(on){state.startTime=Date.now();timerInterval=setInterval(()=>{const s=Math.floor((Date.now()-state.startTime)/1000);$('#timer').textContent=new Date(s*1000).toISOString().slice(11,19)},1000)}else{clearInterval(timerInterval);$('#timer').textContent='00:00:00'}updateReady()}
 window.centauri.onEnded(code=>{setStreaming(false);toast(code===0?'Diffusion arrêtée':`Diffusion interrompue (code ${code})`)});
+window.centauri.onDestinationState(({name,status})=>{const d=state.destinations.find(x=>x.name===name);if(d){d.status=status;renderDestinations()}});
+window.centauri.onReconnecting(({attempt,delay})=>{state.streaming=true;$('#statState').textContent=`Reconnexion ${attempt}/5`;$('#liveBadge').innerHTML='<span class="dot"></span>RECONNEXION';toast(`Flux interrompu — nouvelle tentative dans ${Math.round(delay/1000)} s`)});
+window.centauri.onReconnected(({attempt})=>{if(attempt){$('#statState').textContent='En direct';$('#liveBadge').innerHTML='<span class="dot live"></span>EN DIRECT';toast('Diffusion reconnectée automatiquement')}});
 let logs='';window.centauri.onLog(text=>{logs=(logs+text).slice(-20000);$('#diagLog').textContent=logs;$('#diagLog').scrollTop=$('#diagLog').scrollHeight});
 $('#runDiag').onclick=async()=>{const ip=$('#printerIP').value.trim(),p=await window.centauri.probe(ip),f=await window.centauri.ffmpegStatus();$('#diagLog').textContent=`Diagnostic Centauri Live\n\nImprimante : ${ip}\nCaméra (3031) : ${p.camera?'OK':'INACCESSIBLE'}\nContrôle (3030) : ${p.control?'OK':'INACCESSIBLE'}\nFFmpeg : ${f.installed?'INSTALLÉ':'ABSENT'}\nSystème : ${f.platform}\nFlux : http://${ip}:3031/video`};
 $('#installFfmpeg').onclick=async()=>{const b=$('#installFfmpeg'),p=$('#installProgress');b.disabled=true;b.textContent='Installation en cours…';p.classList.add('active');$('#diagLog').textContent='Préparation de l’installation de FFmpeg…\n';const result=await window.centauri.installFfmpeg();if(!result.ok){b.disabled=false;b.textContent='Installer FFmpeg automatiquement';p.classList.remove('active');toast(result.error)}};
 window.centauri.onInstallLog(text=>{const log=$('#diagLog');log.textContent=(log.textContent+text).slice(-20000);log.scrollTop=log.scrollHeight});
 window.centauri.onInstallEnded(async result=>{const b=$('#installFfmpeg'),p=$('#installProgress');p.classList.remove('active');b.disabled=false;b.textContent=result.ok?'FFmpeg installé ✓':'Réessayer l’installation';const status=await window.centauri.ffmpegStatus();$('#ffmpegDot').classList.toggle('ok',status.installed);$('#ffmpegText').textContent=status.installed?'Installé et prêt':'Installation requise';toast(result.ok?'FFmpeg est installé et prêt':`Échec de l’installation${result.code!==undefined?' (code '+result.code+')':''}`)});
 window.centauri.ffmpegStatus().then(f=>{$('#ffmpegDot').classList.toggle('ok',f.installed);$('#ffmpegText').textContent=f.installed?'Installé et prêt':'Installation requise'});
-renderDestinations();connect();
+async function initialize(){const secure=await window.centauri.secureStorageStatus();$('#rememberKeys').disabled=!secure.available;const saved=await window.centauri.loadSecrets();if(saved.ok&&saved.destinations.length){saved.destinations.forEach(s=>{const d=state.destinations.find(x=>x.name===s.name);if(d)Object.assign(d,{key:s.key||'',server:s.server||d.server,enabled:!!s.enabled})});$('#rememberKeys').checked=true}$('#rememberKeys').onchange=async()=>{if($('#rememberKeys').checked){await persistSecrets();toast('Clés enregistrées avec le chiffrement système')}else{await window.centauri.clearSecrets();toast('Clés enregistrées supprimées')}};renderDestinations();connect()}
+initialize();

@@ -1,11 +1,11 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, safeStorage } = require('electron');
 const { spawn, execFile } = require('child_process');
 const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
 
-let win, streamProcess, installProcess;
+let win, streamProcess, installProcess, activeStreamConfig, stopRequested = false, reconnectAttempt = 0, reconnectTimer;
 function wingetFFmpegCandidates() {
   if (process.platform !== 'win32') return [];
   const root = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages');
@@ -78,6 +78,25 @@ async function findFfmpeg() {
 }
 
 ipcMain.handle('ffmpeg-status', async () => ({ installed: !!(await findFfmpeg()), platform: process.platform }));
+ipcMain.handle('secure-storage-status', () => ({ available: safeStorage.isEncryptionAvailable() }));
+ipcMain.handle('save-secrets', (_, destinations) => {
+  if (!safeStorage.isEncryptionAvailable()) return { ok: false, error: 'Le chiffrement système est indisponible.' };
+  const secrets = destinations.map(({ name, key, server, enabled }) => ({ name, key, server, enabled }));
+  const encrypted = safeStorage.encryptString(JSON.stringify(secrets));
+  fs.writeFileSync(path.join(app.getPath('userData'), 'stream-secrets.bin'), encrypted, { mode: 0o600 });
+  return { ok: true };
+});
+ipcMain.handle('load-secrets', () => {
+  const file = path.join(app.getPath('userData'), 'stream-secrets.bin');
+  if (!safeStorage.isEncryptionAvailable() || !fs.existsSync(file)) return { ok: true, destinations: [] };
+  try { return { ok: true, destinations: JSON.parse(safeStorage.decryptString(fs.readFileSync(file))) }; }
+  catch { return { ok: false, error: 'Impossible de déchiffrer les clés enregistrées.' }; }
+});
+ipcMain.handle('clear-secrets', () => {
+  const file = path.join(app.getPath('userData'), 'stream-secrets.bin');
+  if (fs.existsSync(file)) fs.unlinkSync(file);
+  return { ok: true };
+});
 ipcMain.handle('install-ffmpeg', async () => {
   if (installProcess) return { ok: false, error: 'Une installation est déjà en cours.' };
   const command = process.platform === 'darwin' ? '/opt/homebrew/bin/brew' : 'winget';
@@ -108,7 +127,12 @@ function safeTarget(server, key) {
   return url.replaceAll('\\', '\\\\').replaceAll('|', '\\|').replaceAll("'", "\\'");
 }
 
-ipcMain.handle('start-stream', async (_, config) => {
+function destinationStates(config, status, detail = '') {
+  config.destinations.filter(d => d.enabled && d.server && d.key)
+    .forEach(d => win?.webContents.send('destination-state', { name: d.name, status, detail }));
+}
+
+async function launchStream(config) {
   if (streamProcess) return { ok: false, error: 'Une diffusion est déjà active.' };
   const ffmpeg = await findFfmpeg();
   if (!ffmpeg) return { ok: false, error: 'FFmpeg est introuvable.' };
@@ -126,14 +150,41 @@ ipcMain.handle('start-stream', async (_, config) => {
     '-vf', p.filter, '-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-pix_fmt', 'yuv420p',
     '-r', '30', '-g', '60', '-b:v', p.bitrate, '-maxrate', p.bitrate, '-bufsize', p.buffer,
     '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-f', 'tee', tee];
+  destinationStates(config, reconnectAttempt ? 'reconnecting' : 'connecting');
   streamProcess = spawn(ffmpeg, args, { windowsHide: true });
+  const launchedProcess = streamProcess;
   streamProcess.stderr.on('data', data => win?.webContents.send('stream-log', data.toString()));
-  streamProcess.on('exit', code => { streamProcess = null; win?.webContents.send('stream-ended', code); });
+  streamProcess.once('spawn', () => {
+    destinationStates(config, 'live');
+    win?.webContents.send('stream-reconnected', { attempt: reconnectAttempt });
+    setTimeout(() => { if (streamProcess === launchedProcess) reconnectAttempt = 0; }, 15000);
+  });
+  streamProcess.on('exit', code => {
+    streamProcess = null;
+    if (!stopRequested && activeStreamConfig && reconnectAttempt < 5) {
+      reconnectAttempt += 1;
+      const delay = Math.min(2000 * reconnectAttempt, 10000);
+      destinationStates(config, 'reconnecting', `Tentative ${reconnectAttempt}/5`);
+      win?.webContents.send('stream-reconnecting', { attempt: reconnectAttempt, delay });
+      reconnectTimer = setTimeout(() => launchStream(activeStreamConfig), delay);
+    } else {
+      destinationStates(config, stopRequested ? 'idle' : 'error', stopRequested ? '' : `Code ${code}`);
+      activeStreamConfig = null;
+      win?.webContents.send('stream-ended', code);
+    }
+  });
   return { ok: true, pid: streamProcess.pid };
+}
+
+ipcMain.handle('start-stream', async (_, config) => {
+  stopRequested = false; reconnectAttempt = 0; activeStreamConfig = config;
+  return launchStream(config);
 });
 
 ipcMain.handle('stop-stream', () => {
+  stopRequested = true; activeStreamConfig = null; clearTimeout(reconnectTimer);
   if (streamProcess) process.platform === 'win32' ? spawn('taskkill', ['/pid', String(streamProcess.pid), '/t', '/f']) : streamProcess.kill('SIGINT');
+  else win?.webContents.send('stream-ended', 0);
   return { ok: true };
 });
 

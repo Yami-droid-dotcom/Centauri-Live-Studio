@@ -7,6 +7,7 @@ Application créée par **ApeXploit**.
 Application desktop macOS Apple Silicon et Windows x64 pour la caméra MJPEG de l'Elegoo Centauri Carbon.
 
 Fonctions : détection réseau, aperçu, diagnostic des ports 3030/3031, profils 480p/720p, multidiffusion YouTube/Twitch/Facebook/TikTok, journal FFmpeg et clés non persistantes.
+La version 1.6 ajoute la reconnexion automatique (jusqu'à cinq tentatives), l'état individuel des destinations et la sauvegarde facultative des clés avec le chiffrement natif du système.
 
 ## Développement
 
