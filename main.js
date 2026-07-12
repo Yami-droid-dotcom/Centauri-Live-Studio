@@ -190,7 +190,26 @@ async function launchStream(config) {
   const filter = `${scale}${crop}${mirror},eq=contrast=${contrast}:brightness=${brightness}:saturation=${saturation},unsharp=5:5:${sharpness}`;
   const args = ['-hide_banner', '-loglevel', 'info', '-thread_queue_size', '512', '-use_wallclock_as_timestamps', '1', '-i', config.camera,
     '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'];
-  if (video.overlay) {
+  const sceneSources = Array.isArray(config.overlaySources) ? config.overlaySources.filter(s => s.visible).slice(0, 6) : [];
+  if (sceneSources.length) {
+    const tempDir = app.getPath('temp');
+    sceneSources.forEach((source, index) => {
+      const filename = source.kind === 'application' ? 'centauri-live-studio-logo.png' : 'apexploit-logo.png';
+      const logoPath = path.join(tempDir, `centauri-scene-${index}.png`);
+      fs.copyFileSync(path.join(__dirname, 'renderer', 'assets', filename), logoPath);
+      args.push('-loop', '1', '-i', logoPath);
+    });
+    const chains = [`[0:v]${filter}[scene0]`];
+    sceneSources.forEach((source, index) => {
+      const size = clamp(source.width, 40, 300, 88);
+      const opacity = clamp(source.opacity, .1, 1, 1);
+      const x = clamp(source.x, 0, 95, 80) / 100;
+      const y = clamp(source.y, 0, 95, 80) / 100;
+      chains.push(`[${index + 2}:v]scale=${size}:${size},format=rgba,colorchannelmixer=aa=${opacity}[src${index}]`);
+      chains.push(`[scene${index}][src${index}]overlay=x=W*${x}:y=H*${y}:format=auto[scene${index + 1}]`);
+    });
+    args.push('-filter_complex', chains.join(';'), '-map', `[scene${sceneSources.length}]`, '-map', '1:a:0');
+  } else if (video.overlay) {
     const logoPath = path.join(app.getPath('temp'), 'centauri-apexploit-overlay.png');
     fs.copyFileSync(path.join(__dirname, 'renderer', 'assets', 'apexploit-logo.png'), logoPath);
     args.push('-loop', '1', '-i', logoPath, '-filter_complex', `[0:v]${filter}[base];[2:v]scale=${overlaySize}:${overlaySize},format=rgba,colorchannelmixer=aa=${overlayOpacity}[logo];[base][logo]overlay=${overlayPosition}:format=auto[v]`, '-map', '[v]', '-map', '1:a:0');
