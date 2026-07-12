@@ -21,6 +21,7 @@ La version 1.7 ajoute un assistant de première configuration, la mémorisation 
 La version 1.8 ajoute les réglages de contraste, luminosité, saturation et netteté, un overlay ApeXploit facultatif et les statistiques FPS, débit cible et vitesse d'encodage.
 À partir de la version 1.8.2, tous les réglages visuels et l'overlay sont appliqués instantanément à l'aperçu avant le démarrage du live.
 La version 1.9 ajoute le test privé de 10 secondes, la comparaison avant/après, le zoom, le miroir et la personnalisation de la taille, transparence et position du logo.
+La version 1.9.1 corrige l'étirement vertical de l'aperçu et la disposition responsive des boutons de contrôle.
 
 ## Développement
 
