@@ -1,33 +1,391 @@
-<!doctype html><html lang="fr"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><title>Centauri Live Studio</title><link rel="stylesheet" href="style.css"></head>
-<link rel="stylesheet" href="slicer-theme.css"><body>
-  <aside>
-    <div class="brand"><img class="logo" src="assets/apexploit-logo.png" alt="ApeXploit"><div><strong>Centauri Live</strong><span>BY APEXPLOIT</span></div></div>
-    <nav><button class="active" data-page="studio">◉ <span>Studio</span></button><button data-page="overlays">▧ <span>Overlays</span></button><button data-page="destinations">⌁ <span>Destinations</span></button><button data-page="diagnostics">◇ <span>Diagnostic</span></button></nav>
-    <div class="system"><span id="ffmpegDot" class="dot"></span><div><b>Moteur vidéo</b><small id="ffmpegText">Vérification…</small></div></div>
-  </aside>
-  <main>
-    <header><div><h1>Studio de diffusion</h1><p>Elegoo Centauri Carbon · diffusion locale sécurisée</p></div><div id="liveBadge" class="badge"><span class="dot"></span>HORS LIGNE</div></header>
-
-    <section id="studio" class="page active">
-      <div class="grid">
-        <article class="preview card"><div class="cardhead"><div><h2>Aperçu caméra</h2><p id="cameraLabel">Aucune imprimante connectée</p></div><button id="refreshPreview" class="icon">↻</button></div><div class="video"><svg class="previewFilters" aria-hidden="true"><filter id="previewSharpen"><feConvolveMatrix id="sharpenMatrix" order="3" kernelMatrix="0 0 0 0 1 0 0 0 0" preserveAlpha="true"/></filter></svg><img id="preview" alt="Flux de la caméra"><img id="previewOverlay" class="previewOverlay" src="assets/apexploit-logo.png" alt=""><div id="emptyPreview"><b>Caméra non connectée</b><span>Sélectionnez ou détectez une imprimante</span></div><div class="videoTag">● LIVE PREVIEW</div></div></article>
-        <div class="rightcol">
-          <article class="card connect"><div class="cardhead"><div><h2>Imprimante</h2><p>Connexion au réseau local</p></div></div><label>Adresse IP</label><div class="inputrow"><input id="printerIP" value="192.168.1.203" placeholder="192.168.1.203"><button id="connectBtn">Connecter</button></div><button id="discoverBtn" class="secondary full">⌕ Détecter automatiquement</button><div id="devices" class="devices"></div></article>
-          <article class="card"><div class="cardhead"><div><h2>Qualité de diffusion</h2><p>Optimisation temps réel</p></div></div><div class="profiles"><button data-profile="economy"><b>Éco</b><span>480p · 1,8 Mb/s</span></button><button data-profile="balanced" class="selected"><b>Équilibré</b><span>720p · 3,5 Mb/s</span></button><button data-profile="studio"><b>Studio</b><span>720p · 5 Mb/s</span></button></div></article>
-          <article class="card recording"><div class="cardhead"><div><h2>Enregistrement local</h2><p>Copie MKV résistante aux interruptions</p></div><button id="recordToggle" class="switch"></button></div><div class="recordPath"><span id="recordingPath">Dossier non sélectionné</span><button id="chooseRecording" class="secondary">Choisir</button></div></article>
-          <article class="card imageSettings"><div class="cardhead"><div><h2>Réglages de l’image</h2><p>Appliqués au live et à l’enregistrement</p></div><div><button id="compareImage" class="icon">Voir l’original</button> <button id="resetImage" class="icon">Réinitialiser</button></div></div><label>Contraste <b id="contrastValue">1.00</b></label><input id="contrast" type="range" min="0.7" max="1.5" step="0.05" value="1"><label>Luminosité <b id="brightnessValue">0.00</b></label><input id="brightness" type="range" min="-0.3" max="0.3" step="0.02" value="0"><label>Saturation <b id="saturationValue">1.00</b></label><input id="saturation" type="range" min="0" max="2" step="0.05" value="1"><label>Netteté <b id="sharpnessValue">0.35</b></label><input id="sharpness" type="range" min="0" max="1.5" step="0.05" value="0.35"><label>Zoom <b id="zoomValue">1.00</b></label><input id="zoom" type="range" min="1" max="2" step="0.05" value="1"><div class="overlayRow"><span>Image miroir</span><button id="mirrorToggle" class="switch"></button></div><div class="overlayRow"><span>Logo ApeXploit sur la vidéo</span><button id="overlayToggle" class="switch"></button></div><label>Taille du logo <b id="overlaySizeValue">88</b></label><input id="overlaySize" type="range" min="48" max="180" step="4" value="88"><label>Transparence <b id="overlayOpacityValue">1.00</b></label><input id="overlayOpacity" type="range" min="0.15" max="1" step="0.05" value="1"><select id="overlayPosition"><option value="bottom-right">Logo : bas droite</option><option value="bottom-left">Logo : bas gauche</option><option value="top-right">Logo : haut droite</option><option value="top-left">Logo : haut gauche</option></select></article>
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file: http:; connect-src 'self' http:;"
+    />
+    <title>Centauri Live Studio</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <link rel="stylesheet" href="slicer-theme.css" />
+  <body>
+    <aside>
+      <div class="brand">
+        <img class="logo" src="assets/apexploit-logo.png" alt="ApeXploit" />
+        <div><strong>Centauri Live</strong><span>BY APEXPLOIT</span></div>
+      </div>
+      <nav>
+        <button class="active" data-page="studio">◉ <span>Studio</span></button
+        ><button data-page="overlays">▧ <span>Overlays</span></button
+        ><button data-page="destinations">⌁ <span>Destinations</span></button
+        ><button data-page="diagnostics">◇ <span>Diagnostic</span></button>
+      </nav>
+      <div class="system">
+        <span id="ffmpegDot" class="dot"></span>
+        <div>
+          <b>Moteur vidéo</b><small id="ffmpegText">Vérification…</small>
         </div>
       </div>
-      <article class="card control"><div class="controlInfo"><span id="readyDot" class="dot"></span><b id="readyText">Configuration requise</b><small id="readyDetail">Connectez une caméra et configurez une destination</small></div><div class="controlActions"><button id="testBtn" class="secondary testBtn" disabled>Test privé 10 s</button><button id="streamBtn" class="go" disabled>Démarrer le live</button></div></article>
-      <div class="stats"><div><span>ÉTAT</span><b id="statState">En attente</b></div><div><span>PROFIL</span><b id="statProfile">720p Équilibré</b></div><div><span>FPS / DÉBIT</span><b id="statEncoding">— / —</b></div><div><span>VITESSE / DURÉE</span><b><i id="statSpeed">—</i> · <i id="timer">00:00:00</i></b></div></div>
-    </section>
+    </aside>
+    <main>
+      <header>
+        <div>
+          <h1>Studio de diffusion</h1>
+          <p>Elegoo Centauri Carbon · diffusion locale sécurisée</p>
+        </div>
+        <div id="liveBadge" class="badge">
+          <span class="dot"></span>HORS LIGNE
+        </div>
+      </header>
 
-    <section id="overlays" class="page"><div class="sectiontitle"><h2>Éditeur d’overlays</h2><p>Scène et sources inspirées du fonctionnement d’OBS Studio.</p></div><div class="overlayEditor"><article class="card scenePanel"><div class="cardhead"><div><h2>Scène principale</h2><p>Déplacez une source directement dans l’aperçu</p></div><button id="resetScene" class="icon">Réinitialiser</button></div><div id="sceneCanvas" class="sceneCanvas"><img id="sceneCamera" alt="Caméra"><div id="sceneEmpty">Connectez la caméra depuis le Studio</div></div></article><article class="card sourcesPanel"><div class="cardhead"><div><h2>Sources</h2><p>Les sources du haut sont au premier plan</p></div></div><div id="sourcesList" class="sourcesList"></div><div class="sourceButtons"><button id="addAppLogo">+ Logo application</button><button id="addAuthorLogo" class="secondary">+ Logo auteur</button></div><div id="sourceProperties" class="sourceProperties"><p>Sélectionnez une source.</p></div></article></div></section>
+      <section id="studio" class="page active">
+        <div class="grid">
+          <article class="preview card">
+            <div class="cardhead">
+              <div>
+                <h2>Aperçu caméra</h2>
+                <p id="cameraLabel">Aucune imprimante connectée</p>
+              </div>
+              <button id="refreshPreview" class="icon">↻</button>
+            </div>
+            <div class="video">
+              <svg class="previewFilters" aria-hidden="true">
+                <filter id="previewSharpen">
+                  <feConvolveMatrix
+                    id="sharpenMatrix"
+                    order="3"
+                    kernelMatrix="0 0 0 0 1 0 0 0 0"
+                    preserveAlpha="true"
+                  />
+                </filter></svg
+              ><img id="preview" alt="Flux de la caméra" /><img
+                id="previewOverlay"
+                class="previewOverlay"
+                src="assets/apexploit-logo.png"
+                alt=""
+              />
+              <div id="emptyPreview">
+                <b>Caméra non connectée</b
+                ><span>Sélectionnez ou détectez une imprimante</span>
+              </div>
+              <div class="videoTag">● LIVE PREVIEW</div>
+            </div>
+          </article>
+          <div class="rightcol">
+            <article class="card connect">
+              <div class="cardhead">
+                <div>
+                  <h2>Imprimante</h2>
+                  <p>Connexion au réseau local</p>
+                </div>
+              </div>
+              <label>Adresse IP</label>
+              <div class="inputrow">
+                <input
+                  id="printerIP"
+                  value="192.168.1.203"
+                  placeholder="192.168.1.203"
+                /><button id="connectBtn">Connecter</button>
+              </div>
+              <button id="discoverBtn" class="secondary full">
+                ⌕ Détecter automatiquement
+              </button>
+              <div id="devices" class="devices"></div>
+            </article>
+            <article class="card">
+              <div class="cardhead">
+                <div>
+                  <h2>Qualité de diffusion</h2>
+                  <p>Optimisation temps réel</p>
+                </div>
+              </div>
+              <div class="profiles">
+                <button data-profile="economy">
+                  <b>Éco</b><span>480p · 1,8 Mb/s</span></button
+                ><button data-profile="balanced" class="selected">
+                  <b>Équilibré</b><span>720p · 3,5 Mb/s</span></button
+                ><button data-profile="studio">
+                  <b>Studio</b><span>720p · 5 Mb/s</span>
+                </button>
+              </div>
+            </article>
+            <article class="card recording">
+              <div class="cardhead">
+                <div>
+                  <h2>Enregistrement local</h2>
+                  <p>Copie MKV résistante aux interruptions</p>
+                </div>
+                <button id="recordToggle" class="switch"></button>
+              </div>
+              <div class="recordPath">
+                <span id="recordingPath">Dossier non sélectionné</span
+                ><button id="chooseRecording" class="secondary">Choisir</button>
+              </div>
+            </article>
+            <article class="card imageSettings">
+              <div class="cardhead">
+                <div>
+                  <h2>Réglages de l’image</h2>
+                  <p>Appliqués au live et à l’enregistrement</p>
+                </div>
+                <div>
+                  <button id="compareImage" class="icon">
+                    Voir l’original
+                  </button>
+                  <button id="resetImage" class="icon">Réinitialiser</button>
+                </div>
+              </div>
+              <label>Contraste <b id="contrastValue">1.00</b></label
+              ><input
+                id="contrast"
+                type="range"
+                min="0.7"
+                max="1.5"
+                step="0.05"
+                value="1"
+              /><label>Luminosité <b id="brightnessValue">0.00</b></label
+              ><input
+                id="brightness"
+                type="range"
+                min="-0.3"
+                max="0.3"
+                step="0.02"
+                value="0"
+              /><label>Saturation <b id="saturationValue">1.00</b></label
+              ><input
+                id="saturation"
+                type="range"
+                min="0"
+                max="2"
+                step="0.05"
+                value="1"
+              /><label>Netteté <b id="sharpnessValue">0.35</b></label
+              ><input
+                id="sharpness"
+                type="range"
+                min="0"
+                max="1.5"
+                step="0.05"
+                value="0.35"
+              /><label>Zoom <b id="zoomValue">1.00</b></label
+              ><input
+                id="zoom"
+                type="range"
+                min="1"
+                max="2"
+                step="0.05"
+                value="1"
+              />
+              <div class="overlayRow">
+                <span>Image miroir</span
+                ><button id="mirrorToggle" class="switch"></button>
+              </div>
+              <div class="overlayRow">
+                <span>Logo ApeXploit sur la vidéo</span
+                ><button id="overlayToggle" class="switch"></button>
+              </div>
+              <label>Taille du logo <b id="overlaySizeValue">88</b></label
+              ><input
+                id="overlaySize"
+                type="range"
+                min="48"
+                max="180"
+                step="4"
+                value="88"
+              /><label>Transparence <b id="overlayOpacityValue">1.00</b></label
+              ><input
+                id="overlayOpacity"
+                type="range"
+                min="0.15"
+                max="1"
+                step="0.05"
+                value="1"
+              /><select id="overlayPosition">
+                <option value="bottom-right">Logo : bas droite</option>
+                <option value="bottom-left">Logo : bas gauche</option>
+                <option value="top-right">Logo : haut droite</option>
+                <option value="top-left">Logo : haut gauche</option>
+              </select>
+            </article>
+          </div>
+        </div>
+        <article class="card control">
+          <div class="controlInfo">
+            <span id="readyDot" class="dot"></span
+            ><b id="readyText">Configuration requise</b
+            ><small id="readyDetail"
+              >Connectez une caméra et configurez une destination</small
+            >
+          </div>
+          <div class="controlActions">
+            <button id="testBtn" class="secondary testBtn" disabled>
+              Test privé 10 s</button
+            ><button id="streamBtn" class="go" disabled>
+              Démarrer le live
+            </button>
+          </div>
+        </article>
+        <div class="stats">
+          <div><span>ÉTAT</span><b id="statState">En attente</b></div>
+          <div><span>PROFIL</span><b id="statProfile">720p Équilibré</b></div>
+          <div><span>FPS / DÉBIT</span><b id="statEncoding">— / —</b></div>
+          <div>
+            <span>VITESSE / DURÉE</span
+            ><b><i id="statSpeed">—</i> · <i id="timer">00:00:00</i></b>
+          </div>
+        </div>
+      </section>
 
-    <section id="destinations" class="page"><div class="sectiontitle"><h2>Destinations de diffusion</h2><p>Chaque plateforme affiche désormais son état en temps réel.</p><label class="secureOption"><input id="rememberKeys" type="checkbox"> Mémoriser mes clés avec le chiffrement sécurisé du système</label></div><div id="destinationList" class="destinationList"></div></section>
-    <section id="diagnostics" class="page"><div class="sectiontitle"><h2>Diagnostic</h2><p>État de la caméra, du contrôle réseau et de FFmpeg.</p></div><article class="card diag"><button id="runDiag">Lancer le diagnostic</button><button id="installFfmpeg" class="secondary">Installer FFmpeg automatiquement</button><div id="installProgress" class="installProgress"><span></span></div><pre id="diagLog">Aucun diagnostic lancé.</pre></article><article class="card ffmpegHelp"><div><h2>Installation manuelle de secours</h2><p>FFmpeg est un projet libre indépendant. En cas d’échec de l’installation automatique, privilégiez la page officielle, qui référence les fournisseurs de binaires adaptés à chaque système.</p></div><div class="helpLinks"><button data-help="official">Site officiel FFmpeg</button><button data-help="macos" class="secondary">Binaire macOS référencé</button><button data-help="windows" class="secondary">Binaire Windows référencé</button><button data-help="homebrew" class="secondary">Installer Homebrew</button></div><ol><li>Téléchargez FFmpeg uniquement depuis une source référencée par le projet officiel.</li><li>macOS : Homebrew reste la méthode recommandée pour les Mac Apple Silicon.</li><li>Windows : le paquet Essentials de gyan.dev suffit pour Centauri Live.</li><li>Relancez l’application, puis exécutez de nouveau le diagnostic.</li></ol></article></section>
-    <footer><img src="assets/apexploit-logo.png" alt=""><span>Créé par <b>ApeXploit</b><br>Application indépendante pour Elegoo Centauri Carbon — non affiliée, approuvée ou éditée par Elegoo.</span></footer>
-  </main>
-  <div id="onboarding" class="onboarding"><div class="wizard"><img src="assets/apexploit-logo.png" alt="ApeXploit"><span id="wizardStep">ÉTAPE 1 SUR 3</span><h2 id="wizardTitle">Bienvenue dans Centauri Live</h2><p id="wizardText">Configurons votre Centauri Carbon et le moteur vidéo en quelques instants.</p><div class="wizardActions"><button id="wizardSkip" class="secondary">Ignorer</button><button id="wizardNext">Commencer</button></div></div></div>
-  <div id="toast"></div><script src="app.js"></script>
-</body></html>
+      <section id="overlays" class="page">
+        <div class="sectiontitle">
+          <h2>Scènes et overlays</h2>
+          <p>
+            Composez plusieurs présentations et choisissez celle envoyée au
+            direct.
+          </p>
+        </div>
+        <div class="sceneToolbar card">
+          <div>
+            <label for="sceneSelect">SCÈNE ACTIVE</label
+            ><select id="sceneSelect"></select>
+          </div>
+          <div class="sceneActions">
+            <button id="addScene">+ Nouvelle</button
+            ><button id="duplicateScene" class="secondary">Dupliquer</button
+            ><button id="renameScene" class="secondary">Renommer</button
+            ><button id="deleteScene" class="dangerButton">Supprimer</button>
+          </div>
+        </div>
+        <div class="overlayEditor">
+          <article class="card scenePanel">
+            <div class="cardhead">
+              <div>
+                <h2 id="sceneTitle">Scène Impression</h2>
+                <p>
+                  Déplacez les sources dans l’aperçu · aimantation automatique
+                </p>
+              </div>
+              <button id="resetScene" class="icon">Réinitialiser</button>
+            </div>
+            <div id="sceneCanvas" class="sceneCanvas">
+              <img id="sceneCamera" alt="Caméra" />
+              <div class="safeArea"></div>
+              <div class="centerGuides"></div>
+              <div id="sceneEmpty">Connectez la caméra depuis le Studio</div>
+            </div>
+          </article>
+          <article class="card sourcesPanel">
+            <div class="cardhead">
+              <div>
+                <h2>Sources</h2>
+                <p>Les sources du haut sont au premier plan</p>
+              </div>
+            </div>
+            <div id="sourcesList" class="sourcesList"></div>
+            <div class="sourceButtons">
+              <button id="addText">+ Texte</button
+              ><button id="addCustomImage">+ Image</button
+              ><button id="addAppLogo" class="secondary">
+                Logo application</button
+              ><button id="addAuthorLogo" class="secondary">Logo auteur</button>
+            </div>
+            <div id="sourceProperties" class="sourceProperties">
+              <p>Sélectionnez une source.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="destinations" class="page">
+        <div class="sectiontitle">
+          <h2>Destinations de diffusion</h2>
+          <p>Chaque plateforme affiche désormais son état en temps réel.</p>
+          <label class="secureOption"
+            ><input id="rememberKeys" type="checkbox" /> Mémoriser mes clés avec
+            le chiffrement sécurisé du système</label
+          >
+        </div>
+        <div id="destinationList" class="destinationList"></div>
+      </section>
+      <section id="diagnostics" class="page">
+        <div class="sectiontitle">
+          <h2>Diagnostic</h2>
+          <p>État de la caméra, du contrôle réseau et de FFmpeg.</p>
+        </div>
+        <article class="card diag">
+          <button id="runDiag">Lancer le diagnostic</button
+          ><button id="installFfmpeg" class="secondary">
+            Installer FFmpeg automatiquement
+          </button>
+          <div id="installProgress" class="installProgress"><span></span></div>
+          <pre id="diagLog">Aucun diagnostic lancé.</pre>
+        </article>
+        <article class="card ffmpegHelp">
+          <div>
+            <h2>Installation manuelle de secours</h2>
+            <p>
+              FFmpeg est un projet libre indépendant. En cas d’échec de
+              l’installation automatique, privilégiez la page officielle, qui
+              référence les fournisseurs de binaires adaptés à chaque système.
+            </p>
+          </div>
+          <div class="helpLinks">
+            <button data-help="official">Site officiel FFmpeg</button
+            ><button data-help="macos" class="secondary">
+              Binaire macOS référencé</button
+            ><button data-help="windows" class="secondary">
+              Binaire Windows référencé</button
+            ><button data-help="homebrew" class="secondary">
+              Installer Homebrew
+            </button>
+          </div>
+          <ol>
+            <li>
+              Téléchargez FFmpeg uniquement depuis une source référencée par le
+              projet officiel.
+            </li>
+            <li>
+              macOS : Homebrew reste la méthode recommandée pour les Mac Apple
+              Silicon.
+            </li>
+            <li>
+              Windows : le paquet Essentials de gyan.dev suffit pour Centauri
+              Live.
+            </li>
+            <li>
+              Relancez l’application, puis exécutez de nouveau le diagnostic.
+            </li>
+          </ol>
+        </article>
+      </section>
+      <footer>
+        <img src="assets/apexploit-logo.png" alt="" /><span
+          >Créé par <b>ApeXploit</b><br />Application indépendante pour Elegoo
+          Centauri Carbon — non affiliée, approuvée ou éditée par Elegoo.</span
+        >
+      </footer>
+    </main>
+    <div id="onboarding" class="onboarding">
+      <div class="wizard">
+        <img src="assets/apexploit-logo.png" alt="ApeXploit" /><span
+          id="wizardStep"
+          >ÉTAPE 1 SUR 3</span
+        >
+        <h2 id="wizardTitle">Bienvenue dans Centauri Live</h2>
+        <p id="wizardText">
+          Configurons votre Centauri Carbon et le moteur vidéo en quelques
+          instants.
+        </p>
+        <div class="wizardActions">
+          <button id="wizardSkip" class="secondary">Ignorer</button
+          ><button id="wizardNext">Commencer</button>
+        </div>
+      </div>
+    </div>
+    <div id="toast"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

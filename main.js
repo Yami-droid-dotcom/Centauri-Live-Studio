@@ -1,66 +1,124 @@
-const { app, BrowserWindow, ipcMain, shell, safeStorage, dialog } = require('electron');
-const { spawn, execFile } = require('child_process');
-const fs = require('fs');
-const net = require('net');
-const os = require('os');
-const path = require('path');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  safeStorage,
+  dialog,
+} = require("electron");
+const { spawn, execFile } = require("child_process");
+const fs = require("fs");
+const net = require("net");
+const os = require("os");
+const path = require("path");
 
-let win, streamProcess, installProcess, activeStreamConfig, stopRequested = false, reconnectAttempt = 0, reconnectTimer;
+let win,
+  streamProcess,
+  installProcess,
+  activeStreamConfig,
+  stopRequested = false,
+  reconnectAttempt = 0,
+  reconnectTimer;
 function wingetFFmpegCandidates() {
-  if (process.platform !== 'win32') return [];
-  const root = path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages');
+  if (process.platform !== "win32") return [];
+  const root = path.join(
+    process.env.LOCALAPPDATA || "",
+    "Microsoft",
+    "WinGet",
+    "Packages",
+  );
   if (!fs.existsSync(root)) return [];
   try {
-    return fs.readdirSync(root, { recursive: true, withFileTypes: true })
-      .filter(e => e.isFile() && e.name.toLowerCase() === 'ffmpeg.exe')
-      .map(e => path.join(e.parentPath || e.path, e.name));
-  } catch { return []; }
+    return fs
+      .readdirSync(root, { recursive: true, withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.toLowerCase() === "ffmpeg.exe")
+      .map((e) => path.join(e.parentPath || e.path, e.name));
+  } catch {
+    return [];
+  }
 }
-const ffmpegCandidates = () => process.platform === 'win32'
-  ? [path.join(process.resourcesPath, 'ffmpeg.exe'), ...wingetFFmpegCandidates(), 'ffmpeg.exe', 'ffmpeg']
-  : [path.join(process.resourcesPath, 'ffmpeg'), '/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', 'ffmpeg'];
+const ffmpegCandidates = () =>
+  process.platform === "win32"
+    ? [
+        path.join(process.resourcesPath, "ffmpeg.exe"),
+        ...wingetFFmpegCandidates(),
+        "ffmpeg.exe",
+        "ffmpeg",
+      ]
+    : [
+        path.join(process.resourcesPath, "ffmpeg"),
+        "/opt/homebrew/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "ffmpeg",
+      ];
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1280, height: 820, minWidth: 1040, minHeight: 680,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    backgroundColor: '#090d14',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
+    width: 1280,
+    height: 820,
+    minWidth: 1040,
+    minHeight: 680,
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    backgroundColor: "#090d14",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
   });
-  win.webContents.on('console-message', (_, level, message) => { if (level >= 2) console.error(`[Renderer] ${message}`); });
-  win.loadFile(path.join(__dirname, 'renderer/index.html'));
+  win.webContents.on("console-message", (details) => {
+    if (details.level >= 2) console.error(`[Renderer] ${details.message}`);
+  });
+  win.loadFile(path.join(__dirname, "renderer/index.html"));
 }
 
 function testPort(host, port, timeout = 650) {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const socket = new net.Socket();
     let done = false;
-    const finish = value => { if (!done) { done = true; socket.destroy(); resolve(value); } };
+    const finish = (value) => {
+      if (!done) {
+        done = true;
+        socket.destroy();
+        resolve(value);
+      }
+    };
     socket.setTimeout(timeout);
-    socket.once('connect', () => finish(true));
-    socket.once('timeout', () => finish(false));
-    socket.once('error', () => finish(false));
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
     socket.connect(port, host);
   });
 }
 
 function localPrefixes() {
   const prefixes = new Set();
-  Object.values(os.networkInterfaces()).flat().filter(Boolean).forEach(i => {
-    if (i.family === 'IPv4' && !i.internal && i.address.startsWith('192.168.'))
-      prefixes.add(i.address.split('.').slice(0, 3).join('.'));
-  });
+  Object.values(os.networkInterfaces())
+    .flat()
+    .filter(Boolean)
+    .forEach((i) => {
+      if (
+        i.family === "IPv4" &&
+        !i.internal &&
+        i.address.startsWith("192.168.")
+      )
+        prefixes.add(i.address.split(".").slice(0, 3).join("."));
+    });
   return [...prefixes];
 }
 
-ipcMain.handle('discover', async () => {
+ipcMain.handle("discover", async () => {
   const found = [];
   for (const prefix of localPrefixes()) {
     for (let start = 1; start < 255; start += 32) {
       const batch = [];
       for (let i = start; i < Math.min(start + 32, 255); i++) {
         const ip = `${prefix}.${i}`;
-        batch.push(testPort(ip, 3031).then(ok => { if (ok) found.push({ ip, camera: `http://${ip}:3031/video` }); }));
+        batch.push(
+          testPort(ip, 3031).then((ok) => {
+            if (ok) found.push({ ip, camera: `http://${ip}:3031/video` });
+          }),
+        );
       }
       await Promise.all(batch);
     }
@@ -68,19 +126,55 @@ ipcMain.handle('discover', async () => {
   return found;
 });
 
-ipcMain.handle('probe', async (_, ip) => ({ camera: await testPort(ip, 3031, 1500), control: await testPort(ip, 3030, 1500) }));
-ipcMain.handle('choose-recording-folder', async () => {
-  let moviesPath; try { moviesPath = app.getPath('movies'); } catch { moviesPath = path.join(os.homedir(), 'Movies'); }
-  const result = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'], defaultPath: moviesPath, title: 'Choisir le dossier des enregistrements' });
+ipcMain.handle("probe", async (_, ip) => ({
+  camera: await testPort(ip, 3031, 1500),
+  control: await testPort(ip, 3030, 1500),
+}));
+ipcMain.handle("choose-recording-folder", async () => {
+  let moviesPath;
+  try {
+    moviesPath = app.getPath("movies");
+  } catch {
+    moviesPath = path.join(os.homedir(), "Movies");
+  }
+  const result = await dialog.showOpenDialog(win, {
+    properties: ["openDirectory", "createDirectory"],
+    defaultPath: moviesPath,
+    title: "Choisir le dossier des enregistrements",
+  });
   return result.canceled ? null : result.filePaths[0];
 });
-ipcMain.handle('default-recording-folder', () => { try { return app.getPath('movies'); } catch { return path.join(os.homedir(), 'Movies'); } });
-ipcMain.handle('open-help-link', (_, key) => {
+ipcMain.handle("choose-overlay-image", async () => {
+  const result = await dialog.showOpenDialog(win, {
+    properties: ["openFile"],
+    title: "Choisir une image pour la scène",
+    filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+  const imagePath = result.filePaths[0];
+  const mime =
+    { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" }[
+      path.extname(imagePath).toLowerCase()
+    ] || "image/png";
+  return {
+    path: imagePath,
+    name: path.basename(imagePath, path.extname(imagePath)),
+    dataUrl: `data:${mime};base64,${fs.readFileSync(imagePath).toString("base64")}`,
+  };
+});
+ipcMain.handle("default-recording-folder", () => {
+  try {
+    return app.getPath("movies");
+  } catch {
+    return path.join(os.homedir(), "Movies");
+  }
+});
+ipcMain.handle("open-help-link", (_, key) => {
   const links = {
-    official: 'https://ffmpeg.org/download.html',
-    windows: 'https://www.gyan.dev/ffmpeg/builds/',
-    macos: 'https://evermeet.cx/ffmpeg/',
-    homebrew: 'https://brew.sh/'
+    official: "https://ffmpeg.org/download.html",
+    windows: "https://www.gyan.dev/ffmpeg/builds/",
+    macos: "https://evermeet.cx/ffmpeg/",
+    homebrew: "https://brew.sh/",
   };
   if (!links[key]) return { ok: false };
   shell.openExternal(links[key]);
@@ -89,90 +183,189 @@ ipcMain.handle('open-help-link', (_, key) => {
 
 async function findFfmpeg() {
   for (const candidate of ffmpegCandidates()) {
-    const ok = await new Promise(resolve => execFile(candidate, ['-version'], { timeout: 2500 }, e => resolve(!e)));
+    const ok = await new Promise((resolve) =>
+      execFile(candidate, ["-version"], { timeout: 2500 }, (e) => resolve(!e)),
+    );
     if (ok) return candidate;
   }
   return null;
 }
 
-ipcMain.handle('ffmpeg-status', async () => ({ installed: !!(await findFfmpeg()), platform: process.platform }));
-ipcMain.handle('secure-storage-status', () => ({ available: safeStorage.isEncryptionAvailable() }));
-ipcMain.handle('save-secrets', (_, destinations) => {
-  if (!safeStorage.isEncryptionAvailable()) return { ok: false, error: 'Le chiffrement système est indisponible.' };
-  const secrets = destinations.map(({ name, key, server, enabled }) => ({ name, key, server, enabled }));
+ipcMain.handle("ffmpeg-status", async () => ({
+  installed: !!(await findFfmpeg()),
+  platform: process.platform,
+}));
+ipcMain.handle("secure-storage-status", () => ({
+  available: safeStorage.isEncryptionAvailable(),
+}));
+ipcMain.handle("save-secrets", (_, destinations) => {
+  if (!safeStorage.isEncryptionAvailable())
+    return { ok: false, error: "Le chiffrement système est indisponible." };
+  const secrets = destinations.map(({ name, key, server, enabled }) => ({
+    name,
+    key,
+    server,
+    enabled,
+  }));
   const encrypted = safeStorage.encryptString(JSON.stringify(secrets));
-  fs.writeFileSync(path.join(app.getPath('userData'), 'stream-secrets.bin'), encrypted, { mode: 0o600 });
+  fs.writeFileSync(
+    path.join(app.getPath("userData"), "stream-secrets.bin"),
+    encrypted,
+    { mode: 0o600 },
+  );
   return { ok: true };
 });
-ipcMain.handle('load-secrets', () => {
-  const file = path.join(app.getPath('userData'), 'stream-secrets.bin');
-  if (!safeStorage.isEncryptionAvailable() || !fs.existsSync(file)) return { ok: true, destinations: [] };
-  try { return { ok: true, destinations: JSON.parse(safeStorage.decryptString(fs.readFileSync(file))) }; }
-  catch { return { ok: false, error: 'Impossible de déchiffrer les clés enregistrées.' }; }
+ipcMain.handle("load-secrets", () => {
+  const file = path.join(app.getPath("userData"), "stream-secrets.bin");
+  if (!safeStorage.isEncryptionAvailable() || !fs.existsSync(file))
+    return { ok: true, destinations: [] };
+  try {
+    return {
+      ok: true,
+      destinations: JSON.parse(
+        safeStorage.decryptString(fs.readFileSync(file)),
+      ),
+    };
+  } catch {
+    return {
+      ok: false,
+      error: "Impossible de déchiffrer les clés enregistrées.",
+    };
+  }
 });
-ipcMain.handle('clear-secrets', () => {
-  const file = path.join(app.getPath('userData'), 'stream-secrets.bin');
+ipcMain.handle("clear-secrets", () => {
+  const file = path.join(app.getPath("userData"), "stream-secrets.bin");
   if (fs.existsSync(file)) fs.unlinkSync(file);
   return { ok: true };
 });
-ipcMain.handle('install-ffmpeg', async () => {
-  if (installProcess) return { ok: false, error: 'Une installation est déjà en cours.' };
-  const command = process.platform === 'darwin' ? '/opt/homebrew/bin/brew' : 'winget';
-  const args = process.platform === 'darwin'
-    ? ['install', 'ffmpeg']
-    : ['install', '--exact', '--id', 'Gyan.FFmpeg.Essentials', '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity'];
-  if (process.platform === 'darwin' && !fs.existsSync(command))
-    return { ok: false, error: 'Homebrew est requis. Installez-le depuis brew.sh puis réessayez.' };
+ipcMain.handle("install-ffmpeg", async () => {
+  if (installProcess)
+    return { ok: false, error: "Une installation est déjà en cours." };
+  const command =
+    process.platform === "darwin" ? "/opt/homebrew/bin/brew" : "winget";
+  const args =
+    process.platform === "darwin"
+      ? ["install", "ffmpeg"]
+      : [
+          "install",
+          "--exact",
+          "--id",
+          "Gyan.FFmpeg.Essentials",
+          "--accept-package-agreements",
+          "--accept-source-agreements",
+          "--disable-interactivity",
+        ];
+  if (process.platform === "darwin" && !fs.existsSync(command))
+    return {
+      ok: false,
+      error: "Homebrew est requis. Installez-le depuis brew.sh puis réessayez.",
+    };
   try {
     installProcess = spawn(command, args, { windowsHide: true });
-    const relay = data => win?.webContents.send('ffmpeg-install-log', data.toString());
-    installProcess.stdout.on('data', relay); installProcess.stderr.on('data', relay);
-    installProcess.on('error', error => {
+    const relay = (data) =>
+      win?.webContents.send("ffmpeg-install-log", data.toString());
+    installProcess.stdout.on("data", relay);
+    installProcess.stderr.on("data", relay);
+    installProcess.on("error", (error) => {
       installProcess = null;
-      win?.webContents.send('ffmpeg-install-ended', { ok: false, error: error.message });
+      win?.webContents.send("ffmpeg-install-ended", {
+        ok: false,
+        error: error.message,
+      });
     });
-    installProcess.on('exit', async code => {
+    installProcess.on("exit", async (code) => {
       installProcess = null;
       const installed = !!(await findFfmpeg());
-      win?.webContents.send('ffmpeg-install-ended', { ok: code === 0 && installed, code, installed });
+      win?.webContents.send("ffmpeg-install-ended", {
+        ok: code === 0 && installed,
+        code,
+        installed,
+      });
     });
     return { ok: true };
-  } catch (error) { installProcess = null; return { ok: false, error: error.message }; }
+  } catch (error) {
+    installProcess = null;
+    return { ok: false, error: error.message };
+  }
 });
 
 function safeTarget(server, key) {
-  const url = server.endsWith('/') ? server + key : server + '/' + key;
-  return url.replaceAll('\\', '\\\\').replaceAll('|', '\\|').replaceAll("'", "\\'");
+  const url = server.endsWith("/") ? server + key : server + "/" + key;
+  return url
+    .replaceAll("\\", "\\\\")
+    .replaceAll("|", "\\|")
+    .replaceAll("'", "\\'");
 }
 
-function destinationStates(config, status, detail = '') {
-  config.destinations.filter(d => d.enabled && d.server && d.key)
-    .forEach(d => win?.webContents.send('destination-state', { name: d.name, status, detail }));
+function destinationStates(config, status, detail = "") {
+  config.destinations
+    .filter((d) => d.enabled && d.server && d.key)
+    .forEach((d) =>
+      win?.webContents.send("destination-state", {
+        name: d.name,
+        status,
+        detail,
+      }),
+    );
 }
 
 async function launchStream(config) {
-  if (streamProcess) return { ok: false, error: 'Une diffusion est déjà active.' };
+  if (streamProcess)
+    return { ok: false, error: "Une diffusion est déjà active." };
   const ffmpeg = await findFfmpeg();
-  if (!ffmpeg) return { ok: false, error: 'FFmpeg est introuvable.' };
-  const active = config.destinations.filter(d => d.enabled && d.server && d.key);
-  if (!active.length && !config.recording?.enabled && !config.testMode) return { ok: false, error: 'Aucune destination ou sortie locale active.' };
-  const outputs = active.map(d => `[f=flv:onfail=ignore]${safeTarget(d.server, d.key)}`);
-  if (config.testMode) outputs.push(`[f=null:onfail=ignore]${process.platform === 'win32' ? 'NUL' : '/dev/null'}`);
+  if (!ffmpeg) return { ok: false, error: "FFmpeg est introuvable." };
+  const active = config.destinations.filter(
+    (d) => d.enabled && d.server && d.key,
+  );
+  if (!active.length && !config.recording?.enabled && !config.testMode)
+    return { ok: false, error: "Aucune destination ou sortie locale active." };
+  const outputs = active.map(
+    (d) => `[f=flv:onfail=ignore]${safeTarget(d.server, d.key)}`,
+  );
+  if (config.testMode)
+    outputs.push(
+      `[f=null:onfail=ignore]${process.platform === "win32" ? "NUL" : "/dev/null"}`,
+    );
   if (config.recording?.enabled && config.recording.path) {
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const outputPath = path.join(config.recording.path, `Centauri-${stamp}.mkv`);
-    const escapedPath = outputPath.replaceAll('\\', '\\\\').replaceAll(':', '\\:').replaceAll('|', '\\|').replaceAll("'", "\\'");
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const outputPath = path.join(
+      config.recording.path,
+      `Centauri-${stamp}.mkv`,
+    );
+    const escapedPath = outputPath
+      .replaceAll("\\", "\\\\")
+      .replaceAll(":", "\\:")
+      .replaceAll("|", "\\|")
+      .replaceAll("'", "\\'");
     outputs.push(`[f=matroska:onfail=ignore]${escapedPath}`);
-    win?.webContents.send('recording-started', outputPath);
+    win?.webContents.send("recording-started", outputPath);
   }
-  const tee = outputs.join('|');
+  const tee = outputs.join("|");
   const profiles = {
-    economy: { filter: 'scale=854:480:flags=lanczos', bitrate: '1800k', buffer: '3600k' },
-    balanced: { filter: 'scale=1280:720:flags=lanczos,eq=contrast=1.04:saturation=1.04,unsharp=5:5:0.35', bitrate: '3500k', buffer: '7000k' },
-    studio: { filter: 'scale=1280:720:flags=lanczos,eq=contrast=1.07:brightness=0.012:saturation=1.06,unsharp=5:5:0.5', bitrate: '5000k', buffer: '10000k' }
+    economy: {
+      filter: "scale=854:480:flags=lanczos",
+      bitrate: "1800k",
+      buffer: "3600k",
+    },
+    balanced: {
+      filter:
+        "scale=1280:720:flags=lanczos,eq=contrast=1.04:saturation=1.04,unsharp=5:5:0.35",
+      bitrate: "3500k",
+      buffer: "7000k",
+    },
+    studio: {
+      filter:
+        "scale=1280:720:flags=lanczos,eq=contrast=1.07:brightness=0.012:saturation=1.06,unsharp=5:5:0.5",
+      bitrate: "5000k",
+      buffer: "10000k",
+    },
   };
   const p = profiles[config.profile] || profiles.balanced;
-  const clamp = (value, min, max, fallback) => Math.min(max, Math.max(min, Number.isFinite(Number(value)) ? Number(value) : fallback));
+  const clamp = (value, min, max, fallback) =>
+    Math.min(
+      max,
+      Math.max(min, Number.isFinite(Number(value)) ? Number(value) : fallback),
+    );
   const video = config.video || {};
   const contrast = clamp(video.contrast, 0.7, 1.5, 1);
   const brightness = clamp(video.brightness, -0.3, 0.3, 0);
@@ -181,84 +374,220 @@ async function launchStream(config) {
   const zoom = clamp(video.zoom, 1, 2, 1);
   const overlaySize = clamp(video.overlaySize, 48, 180, 88);
   const overlayOpacity = clamp(video.overlayOpacity, 0.15, 1, 1);
-  const positions = { 'bottom-right': 'W-w-18:H-h-18', 'bottom-left': '18:H-h-18', 'top-right': 'W-w-18:18', 'top-left': '18:18' };
-  const overlayPosition = positions[video.overlayPosition] || positions['bottom-right'];
-  const scale = p.filter.split(',eq=')[0];
-  const dimensions = config.profile === 'economy' ? '854:480' : '1280:720';
-  const mirror = video.mirror ? ',hflip' : '';
-  const crop = zoom > 1 ? `,crop=iw/${zoom}:ih/${zoom},scale=${dimensions}:flags=lanczos` : '';
+  const positions = {
+    "bottom-right": "W-w-18:H-h-18",
+    "bottom-left": "18:H-h-18",
+    "top-right": "W-w-18:18",
+    "top-left": "18:18",
+  };
+  const overlayPosition =
+    positions[video.overlayPosition] || positions["bottom-right"];
+  const scale = p.filter.split(",eq=")[0];
+  const dimensions = config.profile === "economy" ? "854:480" : "1280:720";
+  const mirror = video.mirror ? ",hflip" : "";
+  const crop =
+    zoom > 1
+      ? `,crop=iw/${zoom}:ih/${zoom},scale=${dimensions}:flags=lanczos`
+      : "";
   const filter = `${scale}${crop}${mirror},eq=contrast=${contrast}:brightness=${brightness}:saturation=${saturation},unsharp=5:5:${sharpness}`;
-  const args = ['-hide_banner', '-loglevel', 'info', '-thread_queue_size', '512', '-use_wallclock_as_timestamps', '1', '-i', config.camera,
-    '-f', 'lavfi', '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'];
-  const sceneSources = Array.isArray(config.overlaySources) ? config.overlaySources.filter(s => s.visible).slice(0, 6) : [];
+  const args = [
+    "-hide_banner",
+    "-loglevel",
+    "info",
+    "-thread_queue_size",
+    "512",
+    "-use_wallclock_as_timestamps",
+    "1",
+    "-i",
+    config.camera,
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=channel_layout=stereo:sample_rate=44100",
+  ];
+  const sceneSources = Array.isArray(config.overlaySources)
+    ? config.overlaySources.filter((s) => s.visible).slice(0, 12)
+    : [];
   if (sceneSources.length) {
-    const tempDir = app.getPath('temp');
+    const tempDir = app.getPath("temp");
     sceneSources.forEach((source, index) => {
-      const filename = source.kind === 'application' ? 'centauri-live-studio-logo.png' : 'apexploit-logo.png';
       const logoPath = path.join(tempDir, `centauri-scene-${index}.png`);
-      fs.copyFileSync(path.join(__dirname, 'renderer', 'assets', filename), logoPath);
-      args.push('-loop', '1', '-i', logoPath);
+      if (source.renderedDataUrl) {
+        const encoded = source.renderedDataUrl.replace(
+          /^data:image\/png;base64,/,
+          "",
+        );
+        fs.writeFileSync(logoPath, Buffer.from(encoded, "base64"));
+      } else if (
+        source.kind === "custom" &&
+        source.path &&
+        fs.existsSync(source.path)
+      ) {
+        fs.copyFileSync(source.path, logoPath);
+      } else {
+        const filename =
+          source.kind === "application"
+            ? "centauri-live-studio-logo.png"
+            : "apexploit-logo.png";
+        fs.copyFileSync(
+          path.join(__dirname, "renderer", "assets", filename),
+          logoPath,
+        );
+      }
+      args.push("-loop", "1", "-i", logoPath);
     });
     const chains = [`[0:v]${filter}[scene0]`];
     sceneSources.forEach((source, index) => {
-      const size = clamp(source.width, 40, 300, 88);
-      const opacity = clamp(source.opacity, .1, 1, 1);
+      const size = clamp(source.width, 40, 800, 88);
+      const opacity = clamp(source.opacity, 0.1, 1, 1);
       const x = clamp(source.x, 0, 95, 80) / 100;
       const y = clamp(source.y, 0, 95, 80) / 100;
-      chains.push(`[${index + 2}:v]scale=${size}:${size},format=rgba,colorchannelmixer=aa=${opacity}[src${index}]`);
-      chains.push(`[scene${index}][src${index}]overlay=x=W*${x}:y=H*${y}:format=auto[scene${index + 1}]`);
+      chains.push(
+        `[${index + 2}:v]scale=${size}:-1:flags=lanczos,format=rgba,colorchannelmixer=aa=${opacity}[src${index}]`,
+      );
+      chains.push(
+        `[scene${index}][src${index}]overlay=x=W*${x}:y=H*${y}:format=auto[scene${index + 1}]`,
+      );
     });
-    args.push('-filter_complex', chains.join(';'), '-map', `[scene${sceneSources.length}]`, '-map', '1:a:0');
+    args.push(
+      "-filter_complex",
+      chains.join(";"),
+      "-map",
+      `[scene${sceneSources.length}]`,
+      "-map",
+      "1:a:0",
+    );
   } else if (video.overlay) {
-    const logoPath = path.join(app.getPath('temp'), 'centauri-apexploit-overlay.png');
-    fs.copyFileSync(path.join(__dirname, 'renderer', 'assets', 'apexploit-logo.png'), logoPath);
-    args.push('-loop', '1', '-i', logoPath, '-filter_complex', `[0:v]${filter}[base];[2:v]scale=${overlaySize}:${overlaySize},format=rgba,colorchannelmixer=aa=${overlayOpacity}[logo];[base][logo]overlay=${overlayPosition}:format=auto[v]`, '-map', '[v]', '-map', '1:a:0');
-  } else args.push('-map', '0:v:0', '-map', '1:a:0', '-vf', filter);
-  args.push('-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-pix_fmt', 'yuv420p',
-    '-r', '15', '-g', '30', '-b:v', p.bitrate, '-maxrate', p.bitrate, '-bufsize', p.buffer,
-    '-c:a', 'aac', '-b:a', '128k', '-ar', '44100', '-flags', '+global_header', '-f', 'tee', tee);
-  destinationStates(config, reconnectAttempt ? 'reconnecting' : 'connecting');
+    const logoPath = path.join(
+      app.getPath("temp"),
+      "centauri-apexploit-overlay.png",
+    );
+    fs.copyFileSync(
+      path.join(__dirname, "renderer", "assets", "apexploit-logo.png"),
+      logoPath,
+    );
+    args.push(
+      "-loop",
+      "1",
+      "-i",
+      logoPath,
+      "-filter_complex",
+      `[0:v]${filter}[base];[2:v]scale=${overlaySize}:${overlaySize},format=rgba,colorchannelmixer=aa=${overlayOpacity}[logo];[base][logo]overlay=${overlayPosition}:format=auto[v]`,
+      "-map",
+      "[v]",
+      "-map",
+      "1:a:0",
+    );
+  } else args.push("-map", "0:v:0", "-map", "1:a:0", "-vf", filter);
+  args.push(
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-tune",
+    "zerolatency",
+    "-pix_fmt",
+    "yuv420p",
+    "-r",
+    "15",
+    "-g",
+    "30",
+    "-b:v",
+    p.bitrate,
+    "-maxrate",
+    p.bitrate,
+    "-bufsize",
+    p.buffer,
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-ar",
+    "44100",
+    "-flags",
+    "+global_header",
+    "-f",
+    "tee",
+    tee,
+  );
+  destinationStates(config, reconnectAttempt ? "reconnecting" : "connecting");
   streamProcess = spawn(ffmpeg, args, { windowsHide: true });
   const launchedProcess = streamProcess;
-  streamProcess.stderr.on('data', data => {
-    const text = data.toString(); win?.webContents.send('stream-log', text);
-    const match = text.match(/fps=\s*([\d.]+).*?bitrate=\s*([\d.]+kbits\/s|N\/A).*?speed=\s*([\d.]+x)/);
-    if (match) win?.webContents.send('stream-stats', { fps: match[1], bitrate: match[2], speed: match[3] });
+  streamProcess.stderr.on("data", (data) => {
+    const text = data.toString();
+    win?.webContents.send("stream-log", text);
+    const match = text.match(
+      /fps=\s*([\d.]+).*?bitrate=\s*([\d.]+kbits\/s|N\/A).*?speed=\s*([\d.]+x)/,
+    );
+    if (match)
+      win?.webContents.send("stream-stats", {
+        fps: match[1],
+        bitrate: match[2],
+        speed: match[3],
+      });
   });
-  streamProcess.once('spawn', () => {
-    destinationStates(config, 'live');
-    win?.webContents.send('stream-reconnected', { attempt: reconnectAttempt });
-    setTimeout(() => { if (streamProcess === launchedProcess) reconnectAttempt = 0; }, 15000);
+  streamProcess.once("spawn", () => {
+    destinationStates(config, "live");
+    win?.webContents.send("stream-reconnected", { attempt: reconnectAttempt });
+    setTimeout(() => {
+      if (streamProcess === launchedProcess) reconnectAttempt = 0;
+    }, 15000);
   });
-  streamProcess.on('exit', code => {
+  streamProcess.on("exit", (code) => {
     streamProcess = null;
     if (!stopRequested && activeStreamConfig && reconnectAttempt < 5) {
       reconnectAttempt += 1;
       const delay = Math.min(2000 * reconnectAttempt, 10000);
-      destinationStates(config, 'reconnecting', `Tentative ${reconnectAttempt}/5`);
-      win?.webContents.send('stream-reconnecting', { attempt: reconnectAttempt, delay });
-      reconnectTimer = setTimeout(() => launchStream(activeStreamConfig), delay);
+      destinationStates(
+        config,
+        "reconnecting",
+        `Tentative ${reconnectAttempt}/5`,
+      );
+      win?.webContents.send("stream-reconnecting", {
+        attempt: reconnectAttempt,
+        delay,
+      });
+      reconnectTimer = setTimeout(
+        () => launchStream(activeStreamConfig),
+        delay,
+      );
     } else {
-      destinationStates(config, stopRequested ? 'idle' : 'error', stopRequested ? '' : `Code ${code}`);
+      destinationStates(
+        config,
+        stopRequested ? "idle" : "error",
+        stopRequested ? "" : `Code ${code}`,
+      );
       activeStreamConfig = null;
-      win?.webContents.send('stream-ended', code);
+      win?.webContents.send("stream-ended", code);
     }
   });
   return { ok: true, pid: streamProcess.pid };
 }
 
-ipcMain.handle('start-stream', async (_, config) => {
-  stopRequested = false; reconnectAttempt = 0; activeStreamConfig = config;
+ipcMain.handle("start-stream", async (_, config) => {
+  stopRequested = false;
+  reconnectAttempt = 0;
+  activeStreamConfig = config;
   return launchStream(config);
 });
 
-ipcMain.handle('stop-stream', () => {
-  stopRequested = true; activeStreamConfig = null; clearTimeout(reconnectTimer);
-  if (streamProcess) process.platform === 'win32' ? spawn('taskkill', ['/pid', String(streamProcess.pid), '/t', '/f']) : streamProcess.kill('SIGINT');
-  else win?.webContents.send('stream-ended', 0);
+ipcMain.handle("stop-stream", () => {
+  stopRequested = true;
+  activeStreamConfig = null;
+  clearTimeout(reconnectTimer);
+  if (streamProcess)
+    process.platform === "win32"
+      ? spawn("taskkill", ["/pid", String(streamProcess.pid), "/t", "/f"])
+      : streamProcess.kill("SIGINT");
+  else win?.webContents.send("stream-ended", 0);
   return { ok: true };
 });
 
 app.whenReady().then(createWindow);
-app.on('window-all-closed', () => { if (streamProcess) streamProcess.kill(); if (process.platform !== 'darwin') app.quit(); });
-app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+app.on("window-all-closed", () => {
+  if (streamProcess) streamProcess.kill();
+  if (process.platform !== "darwin") app.quit();
+});
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});

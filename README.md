@@ -22,6 +22,8 @@ La version 1.8 ajoute les réglages de contraste, luminosité, saturation et net
 À partir de la version 1.8.2, tous les réglages visuels et l'overlay sont appliqués instantanément à l'aperçu avant le démarrage du live.
 La version 1.9 ajoute le test privé de 10 secondes, la comparaison avant/après, le zoom, le miroir et la personnalisation de la taille, transparence et position du logo.
 La version 1.9.1 corrige l'étirement vertical de l'aperçu et la disposition responsive des boutons de contrôle.
+La version 2.0 introduit l'éditeur d'overlays inspiré d'OBS, avec déplacement, ordre, visibilité et rendu identique dans FFmpeg.
+La version 2.1 ajoute les scènes multiples, les sources texte et image, la duplication, le verrouillage, l'aimantation aux bords et au centre, ainsi que la migration automatique des anciens overlays.
 
 ## Développement
 
