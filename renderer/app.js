@@ -28,28 +28,8 @@ const state = {
     overlayPosition: "bottom-right",
   },
   selectedSource: null,
-  overlaySources: [
-    {
-      id: "app-logo",
-      name: "Logo Centauri Live",
-      kind: "application",
-      visible: true,
-      x: 82,
-      y: 78,
-      width: 88,
-      opacity: 1,
-    },
-    {
-      id: "author-logo",
-      name: "Logo ApeXploit",
-      kind: "author",
-      visible: false,
-      x: 4,
-      y: 78,
-      width: 88,
-      opacity: 1,
-    },
-  ],
+  activeSceneId: "print-scene",
+  scenes: [],
   destinations: [
     {
       name: "YouTube",
@@ -363,6 +343,36 @@ $("#resetImage").onclick = () => {
   localStorage.setItem("videoSettings", JSON.stringify(state.video));
   toast("Réglages d’image réinitialisés");
 };
+function renderTextSource(source) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 240;
+  const context = canvas.getContext("2d");
+  context.font = "800 82px Inter, Arial, sans-serif";
+  const text = source.text || "Nouveau texte";
+  const padding = 42;
+  const textWidth = Math.min(1100, context.measureText(text).width);
+  canvas.width = Math.max(280, Math.ceil(textWidth + padding * 2));
+  const ctx = canvas.getContext("2d");
+  ctx.font = "800 82px Inter, Arial, sans-serif";
+  if (source.background !== false) {
+    ctx.fillStyle = "rgba(10, 14, 12, 0.78)";
+    ctx.beginPath();
+    ctx.roundRect(0, 0, canvas.width, canvas.height, 28);
+    ctx.fill();
+  }
+  ctx.fillStyle = source.color || "#39ef18";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, padding, canvas.height / 2, canvas.width - padding * 2);
+  return canvas.toDataURL("image/png");
+}
+function preparedSceneSources() {
+  return currentSources().map((source) => ({
+    ...source,
+    renderedDataUrl:
+      source.kind === "text" ? renderTextSource(source) : undefined,
+  }));
+}
 $("#streamBtn").onclick = async () => {
   if (state.streaming) {
     await window.centauri.stop();
@@ -374,7 +384,7 @@ $("#streamBtn").onclick = async () => {
     destinations: state.destinations,
     recording: state.recording,
     video: state.video,
-    overlaySources: state.overlaySources,
+    overlaySources: preparedSceneSources(),
   });
   if (!result.ok) return toast(result.error);
   setStreaming(true);
@@ -388,7 +398,7 @@ $("#testBtn").onclick = async () => {
     destinations: [],
     recording: { enabled: false },
     video: state.video,
-    overlaySources: state.overlaySources,
+    overlaySources: preparedSceneSources(),
     testMode: true,
   });
   if (!result.ok) {
@@ -631,178 +641,460 @@ function initializeWizard() {
   paint();
 }
 function saveScene() {
-  localStorage.setItem("overlaySources", JSON.stringify(state.overlaySources));
-}
-function sourceAsset(source) {
-  return source.kind === "application"
-    ? "assets/centauri-live-studio-logo.png"
-    : "assets/apexploit-logo.png";
-}
-function selectSource(id) {
-  state.selectedSource = id;
-  renderOverlayEditor();
-}
-function renderOverlayEditor() {
-  const canvas = $("#sceneCanvas");
-  canvas.querySelectorAll(".sceneSource").forEach((x) => x.remove());
-  state.overlaySources.forEach((source) => {
-    const img = document.createElement("img");
-    img.src = sourceAsset(source);
-    img.className = `sceneSource ${source.visible ? "" : "hidden"} ${state.selectedSource === source.id ? "selected" : ""}`;
-    img.dataset.id = source.id;
-    img.style.left = `${source.x}%`;
-    img.style.top = `${source.y}%`;
-    img.style.width = `${source.width / 12.8}%`;
-    img.style.opacity = source.opacity;
-    img.onpointerdown = (e) => {
-      state.selectedSource = source.id;
-      canvas
-        .querySelectorAll(".sceneSource")
-        .forEach((node) => node.classList.toggle("selected", node === img));
-      const rect = canvas.getBoundingClientRect();
-      img.setPointerCapture(e.pointerId);
-      img.onpointermove = (move) => {
-        if (!img.hasPointerCapture(move.pointerId)) return;
-        source.x = Math.max(
-          0,
-          Math.min(95, ((move.clientX - rect.left) / rect.width) * 100),
-        );
-        source.y = Math.max(
-          0,
-          Math.min(95, ((move.clientY - rect.top) / rect.height) * 100),
-        );
-        img.style.left = `${source.x}%`;
-        img.style.top = `${source.y}%`;
-      };
-      img.onpointerup = () => {
-        saveScene();
-        renderOverlayEditor();
-      };
-    };
-    canvas.appendChild(img);
-  });
-  $("#sourcesList").innerHTML = [...state.overlaySources]
-    .reverse()
-    .map(
-      (source) =>
-        `<div class="sourceRow ${state.selectedSource === source.id ? "selected" : ""}" data-source="${source.id}"><button data-eye="${source.id}">${source.visible ? "◉" : "○"}</button><span>${source.name}</span><button data-up="${source.id}">↑</button><button data-down="${source.id}">↓</button><button data-remove="${source.id}">×</button></div>`,
-    )
-    .join("");
-  $$("[data-source]").forEach(
-    (row) =>
-      (row.onclick = (e) => {
-        if (e.target.tagName !== "BUTTON") selectSource(row.dataset.source);
-      }),
+  localStorage.setItem(
+    "sceneCollections",
+    JSON.stringify(state.scenes, (key, value) =>
+      key === "previewData" ? undefined : value,
+    ),
   );
-  $$("[data-eye]").forEach(
-    (b) =>
-      (b.onclick = () => {
-        const s = state.overlaySources.find((x) => x.id === b.dataset.eye);
-        s.visible = !s.visible;
-        saveScene();
-        renderOverlayEditor();
-      }),
-  );
-  const move = (id, delta) => {
-    const i = state.overlaySources.findIndex((x) => x.id === id),
-      j = Math.max(0, Math.min(state.overlaySources.length - 1, i + delta));
-    if (i !== j)
-      [state.overlaySources[i], state.overlaySources[j]] = [
-        state.overlaySources[j],
-        state.overlaySources[i],
-      ];
-    saveScene();
-    renderOverlayEditor();
-  };
-  $$("[data-up]").forEach((b) => (b.onclick = () => move(b.dataset.up, 1)));
-  $$("[data-down]").forEach(
-    (b) => (b.onclick = () => move(b.dataset.down, -1)),
-  );
-  $$("[data-remove]").forEach(
-    (b) =>
-      (b.onclick = () => {
-        state.overlaySources = state.overlaySources.filter(
-          (x) => x.id !== b.dataset.remove,
-        );
-        state.selectedSource = null;
-        saveScene();
-        renderOverlayEditor();
-      }),
-  );
-  const selected = state.overlaySources.find(
-    (x) => x.id === state.selectedSource,
-  );
-  $("#sourceProperties").innerHTML = selected
-    ? `<h3>${selected.name}</h3><label>Taille <b>${selected.width}px</b></label><input id="sourceWidth" type="range" min="40" max="300" step="4" value="${selected.width}"><label>Opacité <b>${Math.round(selected.opacity * 100)}%</b></label><input id="sourceOpacity" type="range" min="0.1" max="1" step="0.05" value="${selected.opacity}"><small>Position : ${Math.round(selected.x)}%, ${Math.round(selected.y)}%</small>`
-    : "<p>Sélectionnez une source.</p>";
-  if (selected) {
-    $("#sourceWidth").oninput = (e) => {
-      selected.width = Number(e.target.value);
-      saveScene();
-      renderOverlayEditor();
-    };
-    $("#sourceOpacity").oninput = (e) => {
-      selected.opacity = Number(e.target.value);
-      saveScene();
-      renderOverlayEditor();
-    };
-  }
+  localStorage.setItem("activeSceneId", state.activeSceneId);
 }
-function addSceneSource(kind) {
-  const existing = state.overlaySources.find((x) => x.kind === kind);
-  if (existing) {
-    existing.visible = true;
-    state.selectedSource = existing.id;
-  } else {
-    const id = `${kind}-${Date.now()}`;
-    state.overlaySources.push({
-      id,
-      name: kind === "application" ? "Logo Centauri Live" : "Logo ApeXploit",
-      kind,
-      visible: true,
-      x: 75,
-      y: 75,
-      width: 88,
-      opacity: 1,
-    });
-    state.selectedSource = id;
-  }
-  saveScene();
-  renderOverlayEditor();
+function makeId(prefix) {
+  return prefix + "-" + crypto.randomUUID();
 }
-$("#addAppLogo").onclick = () => addSceneSource("application");
-$("#addAuthorLogo").onclick = () => addSceneSource("author");
-$("#resetScene").onclick = () => {
-  state.overlaySources = [
+function defaultSources() {
+  return [
     {
-      id: "app-logo",
+      id: makeId("app-logo"),
       name: "Logo Centauri Live",
       kind: "application",
       visible: true,
+      locked: false,
       x: 82,
       y: 78,
       width: 88,
       opacity: 1,
     },
     {
-      id: "author-logo",
+      id: makeId("author-logo"),
       name: "Logo ApeXploit",
       kind: "author",
       visible: false,
+      locked: false,
       x: 4,
       y: 78,
       width: 88,
       opacity: 1,
     },
   ];
+}
+function currentScene() {
+  return (
+    state.scenes.find((scene) => scene.id === state.activeSceneId) ||
+    state.scenes[0]
+  );
+}
+function currentSources() {
+  return currentScene()?.sources || [];
+}
+function localImageUrl(filePath) {
+  const normalized = String(filePath || "").replace(/\\/g, "/");
+  const encoded = normalized
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  return normalized.startsWith("/")
+    ? "file://" + encoded
+    : "file:///" + encoded;
+}
+function sourceAsset(source) {
+  if (source.kind === "application")
+    return "assets/centauri-live-studio-logo.png";
+  if (source.kind === "author") return "assets/apexploit-logo.png";
+  return source.previewData || localImageUrl(source.path);
+}
+function selectSource(id) {
+  state.selectedSource = id;
+  renderOverlayEditor();
+}
+function sourceDimensions(source) {
+  const width = source.width / 12.8;
+  const aspect = source.aspect || (source.kind === "text" ? 4.5 : 1);
+  return { width, height: (source.width / aspect / 720) * 100 };
+}
+function snapPosition(value, size, threshold = 1.8) {
+  const targets = [0, (100 - size) / 2, Math.max(0, 100 - size)];
+  const target = targets.find(
+    (candidate) => Math.abs(candidate - value) <= threshold,
+  );
+  return target === undefined ? value : target;
+}
+function sourceButton(label, title, action, active = false) {
+  const button = document.createElement("button");
+  button.textContent = label;
+  button.title = title;
+  button.classList.toggle("active", active);
+  button.onclick = (event) => {
+    event.stopPropagation();
+    action();
+  };
+  return button;
+}
+function renderOverlayEditor() {
+  const scene = currentScene();
+  if (!scene) return;
+  const canvas = $("#sceneCanvas");
+  canvas.querySelectorAll(".sceneSource").forEach((node) => node.remove());
+  $("#sceneTitle").textContent = "Scène " + scene.name;
+  $("#sceneSelect").innerHTML = "";
+  state.scenes.forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.name;
+    option.selected = item.id === scene.id;
+    $("#sceneSelect").appendChild(option);
+  });
+  scene.sources.forEach((source) => {
+    const element =
+      source.kind === "text"
+        ? document.createElement("div")
+        : document.createElement("img");
+    if (source.kind === "text") {
+      element.textContent = source.text || "Nouveau texte";
+      element.style.color = source.color || "#39ef18";
+      element.classList.toggle("textBackground", source.background !== false);
+    } else {
+      element.src = sourceAsset(source);
+      element.onload = () => {
+        if (!source.aspect && element.naturalHeight) {
+          source.aspect = element.naturalWidth / element.naturalHeight;
+          saveScene();
+        }
+      };
+    }
+    element.className =
+      "sceneSource " +
+      (source.kind === "text" ? "textSource " : "") +
+      (source.visible ? "" : "hidden ") +
+      (source.locked ? "locked " : "") +
+      (state.selectedSource === source.id ? "selected" : "");
+    if (source.kind === "text" && source.background !== false)
+      element.classList.add("textBackground");
+    element.style.left = source.x + "%";
+    element.style.top = source.y + "%";
+    element.style.width = source.width / 12.8 + "%";
+    element.style.opacity = source.opacity;
+    element.onpointerdown = (event) => {
+      state.selectedSource = source.id;
+      canvas
+        .querySelectorAll(".sceneSource")
+        .forEach((node) => node.classList.toggle("selected", node === element));
+      if (source.locked) {
+        renderOverlayEditor();
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      element.setPointerCapture(event.pointerId);
+      element.onpointermove = (move) => {
+        if (!element.hasPointerCapture(move.pointerId)) return;
+        const dimensions = sourceDimensions(source);
+        const rawX = Math.max(
+          0,
+          Math.min(
+            100 - dimensions.width,
+            ((move.clientX - rect.left) / rect.width) * 100,
+          ),
+        );
+        const rawY = Math.max(
+          0,
+          Math.min(
+            100 - dimensions.height,
+            ((move.clientY - rect.top) / rect.height) * 100,
+          ),
+        );
+        source.x = snapPosition(rawX, dimensions.width);
+        source.y = snapPosition(rawY, dimensions.height);
+        element.style.left = source.x + "%";
+        element.style.top = source.y + "%";
+        canvas.classList.toggle(
+          "snapping",
+          source.x !== rawX || source.y !== rawY,
+        );
+      };
+      element.onpointerup = () => {
+        canvas.classList.remove("snapping");
+        saveScene();
+        renderOverlayEditor();
+      };
+    };
+    canvas.appendChild(element);
+  });
+  const list = $("#sourcesList");
+  list.innerHTML = "";
+  [...scene.sources].reverse().forEach((source) => {
+    const row = document.createElement("div");
+    row.className =
+      "sourceRow " + (state.selectedSource === source.id ? "selected" : "");
+    row.onclick = () => selectSource(source.id);
+    row.appendChild(
+      sourceButton(source.visible ? "◉" : "○", "Afficher ou masquer", () => {
+        source.visible = !source.visible;
+        saveScene();
+        renderOverlayEditor();
+      }),
+    );
+    const name = document.createElement("span");
+    name.textContent = source.name;
+    row.appendChild(name);
+    row.appendChild(
+      sourceButton(
+        source.locked ? "◆" : "◇",
+        "Verrouiller",
+        () => {
+          source.locked = !source.locked;
+          saveScene();
+          renderOverlayEditor();
+        },
+        source.locked,
+      ),
+    );
+    row.appendChild(
+      sourceButton("⧉", "Dupliquer", () => {
+        const copy = {
+          ...source,
+          id: makeId(source.kind),
+          name: source.name + " copie",
+          x: Math.min(90, source.x + 3),
+          y: Math.min(90, source.y + 3),
+          locked: false,
+        };
+        delete copy.previewData;
+        scene.sources.push(copy);
+        state.selectedSource = copy.id;
+        saveScene();
+        renderOverlayEditor();
+      }),
+    );
+    const move = (delta) => {
+      const index = scene.sources.findIndex((item) => item.id === source.id);
+      const next = Math.max(
+        0,
+        Math.min(scene.sources.length - 1, index + delta),
+      );
+      if (index !== next)
+        [scene.sources[index], scene.sources[next]] = [
+          scene.sources[next],
+          scene.sources[index],
+        ];
+      saveScene();
+      renderOverlayEditor();
+    };
+    row.appendChild(sourceButton("↑", "Premier plan", () => move(1)));
+    row.appendChild(sourceButton("↓", "Arrière-plan", () => move(-1)));
+    row.appendChild(
+      sourceButton("×", "Supprimer", () => {
+        scene.sources = scene.sources.filter((item) => item.id !== source.id);
+        state.selectedSource = null;
+        saveScene();
+        renderOverlayEditor();
+      }),
+    );
+    list.appendChild(row);
+  });
+  const selected = scene.sources.find(
+    (source) => source.id === state.selectedSource,
+  );
+  const properties = $("#sourceProperties");
+  if (!selected) {
+    properties.innerHTML = "<p>Sélectionnez une source.</p>";
+    return;
+  }
+  properties.innerHTML =
+    "<h3>" +
+    esc(selected.name) +
+    "</h3>" +
+    (selected.kind === "text"
+      ? '<label>CONTENU</label><input id="sourceText" maxlength="80" value="' +
+        esc(selected.text || "") +
+        '"><label>COULEUR</label><input id="sourceColor" type="color" value="' +
+        (selected.color || "#39ef18") +
+        '"><div class="propertyToggle"><span>Fond lisible</span><button id="sourceBackground" class="switch ' +
+        (selected.background !== false ? "on" : "") +
+        '"></button></div>'
+      : "") +
+    "<label>Taille <b>" +
+    selected.width +
+    'px</b></label><input id="sourceWidth" type="range" min="40" max="800" step="4" value="' +
+    selected.width +
+    '"><label>Opacité <b>' +
+    Math.round(selected.opacity * 100) +
+    '%</b></label><input id="sourceOpacity" type="range" min="0.1" max="1" step="0.05" value="' +
+    selected.opacity +
+    '"><small>Position : ' +
+    Math.round(selected.x) +
+    "%, " +
+    Math.round(selected.y) +
+    "% · " +
+    (selected.locked ? "verrouillée" : "modifiable") +
+    "</small>";
+  if (selected.kind === "text") {
+    $("#sourceText").onchange = (event) => {
+      selected.text = event.target.value;
+      selected.name = event.target.value || "Texte";
+      saveScene();
+      renderOverlayEditor();
+    };
+    $("#sourceColor").oninput = (event) => {
+      selected.color = event.target.value;
+      saveScene();
+      renderOverlayEditor();
+    };
+    $("#sourceBackground").onclick = () => {
+      selected.background = selected.background === false;
+      saveScene();
+      renderOverlayEditor();
+    };
+  }
+  $("#sourceWidth").oninput = (event) => {
+    selected.width = Number(event.target.value);
+    saveScene();
+    renderOverlayEditor();
+  };
+  $("#sourceOpacity").oninput = (event) => {
+    selected.opacity = Number(event.target.value);
+    saveScene();
+    renderOverlayEditor();
+  };
+}
+try {
+  const savedCollections = localStorage.getItem("sceneCollections");
+  const legacyScene = localStorage.getItem("overlaySources");
+  if (savedCollections) state.scenes = JSON.parse(savedCollections);
+  else if (legacyScene)
+    state.scenes = [
+      {
+        id: "print-scene",
+        name: "Impression",
+        sources: JSON.parse(legacyScene).map((source) => ({
+          locked: false,
+          ...source,
+        })),
+      },
+    ];
+} catch {}
+if (!state.scenes.length)
+  state.scenes = [
+    { id: "print-scene", name: "Impression", sources: defaultSources() },
+  ];
+state.activeSceneId =
+  localStorage.getItem("activeSceneId") || state.scenes[0].id;
+if (!currentScene()) state.activeSceneId = state.scenes[0].id;
+function addSceneSourceV2(kind) {
+  const id = makeId(kind);
+  const source = {
+    id,
+    name:
+      kind === "application"
+        ? "Logo Centauri Live"
+        : kind === "author"
+          ? "Logo ApeXploit"
+          : "Impression en direct",
+    kind,
+    visible: true,
+    locked: false,
+    x: kind === "text" ? 5 : 75,
+    y: kind === "text" ? 6 : 75,
+    width: kind === "text" ? 440 : 88,
+    opacity: 1,
+  };
+  if (kind === "text") {
+    source.text = "Impression en direct";
+    source.color = "#39ef18";
+    source.background = true;
+    source.aspect = 4.5;
+  }
+  currentSources().push(source);
+  state.selectedSource = id;
+  saveScene();
+  renderOverlayEditor();
+}
+$("#addAppLogo").onclick = () => addSceneSourceV2("application");
+$("#addAuthorLogo").onclick = () => addSceneSourceV2("author");
+$("#addText").onclick = () => addSceneSourceV2("text");
+$("#addCustomImage").onclick = async () => {
+  const selected = await window.centauri.chooseOverlayImage();
+  if (!selected) return;
+  const source = {
+    id: makeId("custom"),
+    name: selected.name,
+    kind: "custom",
+    path: selected.path,
+    previewData: selected.dataUrl,
+    visible: true,
+    locked: false,
+    x: 10,
+    y: 10,
+    width: 240,
+    opacity: 1,
+  };
+  currentSources().push(source);
+  state.selectedSource = source.id;
+  saveScene();
+  renderOverlayEditor();
+};
+$("#sceneSelect").onchange = (event) => {
+  state.activeSceneId = event.target.value;
+  state.selectedSource = null;
+  saveScene();
+  renderOverlayEditor();
+  toast("Scène active : " + currentScene().name);
+};
+$("#addScene").onclick = () => {
+  const name = prompt("Nom de la nouvelle scène :", "Nouvelle scène");
+  if (!name?.trim()) return;
+  const scene = {
+    id: makeId("scene"),
+    name: name.trim(),
+    sources: [],
+  };
+  state.scenes.push(scene);
+  state.activeSceneId = scene.id;
   state.selectedSource = null;
   saveScene();
   renderOverlayEditor();
 };
-try {
-  const savedScene = localStorage.getItem("overlaySources");
-  if (savedScene) state.overlaySources = JSON.parse(savedScene);
-} catch {}
+$("#duplicateScene").onclick = () => {
+  const original = currentScene();
+  const scene = {
+    id: makeId("scene"),
+    name: original.name + " copie",
+    sources: original.sources.map((source, index) => ({
+      ...source,
+      id: makeId(source.kind + "-" + index),
+      locked: false,
+    })),
+  };
+  state.scenes.push(scene);
+  state.activeSceneId = scene.id;
+  state.selectedSource = null;
+  saveScene();
+  renderOverlayEditor();
+};
+$("#renameScene").onclick = () => {
+  const scene = currentScene();
+  const name = prompt("Nouveau nom de la scène :", scene.name);
+  if (!name?.trim()) return;
+  scene.name = name.trim();
+  saveScene();
+  renderOverlayEditor();
+};
+$("#deleteScene").onclick = () => {
+  if (state.scenes.length === 1)
+    return toast("Une scène au minimum doit être conservée");
+  const scene = currentScene();
+  if (!confirm("Supprimer la scène « " + scene.name + " » ?")) return;
+  state.scenes = state.scenes.filter((item) => item.id !== scene.id);
+  state.activeSceneId = state.scenes[0].id;
+  state.selectedSource = null;
+  saveScene();
+  renderOverlayEditor();
+};
+$("#resetScene").onclick = () => {
+  currentScene().sources = defaultSources();
+  state.selectedSource = null;
+  saveScene();
+  renderOverlayEditor();
+};
 renderOverlayEditor();
 try {
   const savedVideo = localStorage.getItem("videoSettings");
